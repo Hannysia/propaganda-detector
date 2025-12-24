@@ -1,0 +1,12 @@
+transformers
+torch
+accelerate
+pandas
+numpy
+scikit-learn
+wandb
+python-dotenv
+spacy
+tqdm
+huggingface_hub
+kaggle_secrets
