@@ -1,12 +1,4 @@
 transformers
 torch
-accelerate
-pandas
+gradio
 numpy
-scikit-learn
-wandb
-python-dotenv
-spacy
-tqdm
-huggingface_hub
-kaggle_secrets
