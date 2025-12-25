@@ -1,177 +1,114 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 import torch
 import wandb
-from dotenv import load_dotenv
-from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score
+from datetime import datetime
+from sklearn.utils.class_weight import compute_class_weight
 from transformers import (
     AutoTokenizer, 
     AutoModelForSequenceClassification, 
-    Trainer, 
     TrainingArguments
 )
-from datetime import datetime
+from sklearn.model_selection import StratifiedGroupKFold  # <--- Додай це
 
-load_dotenv() 
+sys.path.append(os.getcwd())
+from src.data.dataset import PropagandaDataset
+from src.utils.metrics import compute_metrics, log_confusion_matrix 
+from src.utils.common import setup_environment, print_distribution
+from src.models.trainer import WeightedLossTrainer
 
-hf_token = None
-wandb_key = None
 
-if 'KAGGLE_KERNEL_RUN_TYPE' in os.environ:
-    print("Detected Kaggle Environment ☁️")
-    DATA_PATH = "/kaggle/working/dataset.csv"
-    
-    from kaggle_secrets import UserSecretsClient
-    user_secrets = UserSecretsClient()
-    
-    # Hugging Face Login
-    try:
-        hf_token = user_secrets.get_secret("HF_TOKEN")
-        from huggingface_hub import login
-        login(token=hf_token)
-        print("✅ Logged in to Hugging Face Hub")
-    except:
-        print("⚠️ HF_TOKEN not found. Model will NOT be pushed.")
 
-    # W&B Login
-    try:
-        wandb_key = user_secrets.get_secret("WANDB_API_KEY")
-        wandb.login(key=wandb_key)
-        print("✅ Logged in to W&B")
-    except:
-        print("⚠️ WANDB_API_KEY not found.")
-        
-else:
-    print("Detected Local Environment 🏠")
-    DATA_PATH = "data/processed/dataset.csv"
-    
-    hf_token = os.getenv("HF_TOKEN")
-    wandb.login()
-
+# --- 1. CONFIG & SETUP ---
+DATA_PATH, HF_TOKEN = setup_environment()
 
 MODEL_NAME = "bert-base-uncased"
-MAX_LENGTH = 128 
-now = datetime.now().strftime("%d-%m-%H-%M")
-RUN_NAME = f"baseline-bert-{now}"
+RUN_NAME = f"balanced-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+HF_REPO_NAME = "hannusia123123/propaganda-baseline-bert"
 
-wandb.init(
-    project="propaganda-detector",
-    job_type="baseline-training",
-    name=RUN_NAME
-)
 
+
+# --- 2. PREPARE DATA ---
+print("📊 Loading and splitting data...")
 df = pd.read_csv(DATA_PATH)
 
-labels = sorted(df['label'].unique())
-label2id = {label: i for i, label in enumerate(labels)}
+labels_list = sorted(df['label'].unique())
+label2id = {label: i for i, label in enumerate(labels_list)}
 id2label = {i: label for label, i in label2id.items()}
 
-class PropagandaDataset(torch.utils.data.Dataset):
-    def __init__(self, texts, labels, tokenizer):
-        self.encodings = tokenizer(texts, truncation=True, padding=True, max_length=MAX_LENGTH)
-        self.labels = labels
+print("✂️ Doing Stratified Group Split...")
+sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+train_index, val_index = next(sgkf.split(df['context'], df['label'], groups=df['article_id']))
+train_df = df.iloc[train_index]
+val_df = df.iloc[val_index]
 
-    def __getitem__(self, idx):
-        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-        item['labels'] = torch.tensor(self.labels[idx])
-        return item
+print("-" * 40)
 
-    def __len__(self):
-        return len(self.labels)
+print_distribution(train_df, "TRAIN")
+print_distribution(val_df, "VALIDATION")
 
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
-    
-    f1_macro = f1_score(labels, predictions, average='macro')
-    acc = accuracy_score(labels, predictions)
-    precision_macro = precision_score(labels, predictions, average='macro', zero_division=0)
-    recall_macro = recall_score(labels, predictions, average='macro', zero_division=0)
-    
-    return {
-        "accuracy": acc,
-        "f1_macro": f1_macro,
-        "precision_macro": precision_macro,
-        "recall_macro": recall_macro
-    }
+print("-" * 40)
 
+
+
+# --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
+val_dataset = PropagandaDataset(val_df['context'].tolist(), [label2id[l] for l in val_df['label']], tokenizer)
+
+print("⚖️ Calculating Class Weights...")
+train_labels = [x['labels'].item() for x in train_dataset]
+class_weights_arr = compute_class_weight("balanced", classes=np.unique(train_labels), y=train_labels)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+class_weights = torch.tensor(class_weights_arr, dtype=torch.float).to(device)
+
+
+
+# --- 4. MODEL & TRAINING ---
+wandb.init(project="propaganda-detector", name=RUN_NAME, job_type="train")
+
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME, 
-    num_labels=len(labels),
+    num_labels=len(labels_list),
     id2label=id2label,
     label2id=label2id
 )
 
-unique_article_ids = df['article_id'].unique()
-np.random.seed(42)
-np.random.shuffle(unique_article_ids)
-
-train_size = int(len(unique_article_ids) * 0.8)
-train_article_ids = unique_article_ids[:train_size]
-val_article_ids = unique_article_ids[train_size:]
-
-train_df = df[df['article_id'].isin(train_article_ids)]
-val_df = df[df['article_id'].isin(val_article_ids)]
-
-print(f"Train samples: {len(train_df)} (from {len(train_article_ids)} articles)")
-print(f"Val samples: {len(val_df)} (from {len(val_article_ids)} articles)")
-
-train_dataset = PropagandaDataset(
-    train_df['context'].tolist(), 
-    [label2id[l] for l in train_df['label']], 
-    tokenizer
-)
-val_dataset = PropagandaDataset(
-    val_df['context'].tolist(), 
-    [label2id[l] for l in val_df['label']], 
-    tokenizer
-)
-
-HF_REPO_NAME = "hannusia123123/propaganda-baseline-bert"  
-
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=5, 
+    num_train_epochs=5,
     per_device_train_batch_size=16,
     eval_strategy="epoch",
     save_strategy="epoch",
-    logging_dir="./logs",
     report_to="wandb",
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
     save_total_limit=2,
-    
     push_to_hub=True,   
     hub_model_id=HF_REPO_NAME,        
-    hub_token=hf_token,
+    hub_token=HF_TOKEN,
     hub_strategy="every_save"
 )
 
-trainer = Trainer(
+trainer = WeightedLossTrainer(
+    class_weights=class_weights,
     model=model,
     args=training_args,
     train_dataset=train_dataset,
     eval_dataset=val_dataset,
     compute_metrics=compute_metrics,
-    tokenizer=tokenizer
+    tokenizer=tokenizer 
 )
 
 print("🚀 Starting training...")
 trainer.train()
 
-
-save_path = "./best_baseline_model"
-model.save_pretrained(save_path)
-tokenizer.save_pretrained(save_path)
-
-artifact = wandb.Artifact(name=f"model-{RUN_NAME}", type="model")
-artifact.add_dir(save_path)
-wandb.log_artifact(artifact)
+print("⬆️ Final push to Hub...")
+trainer.push_to_hub()
+log_confusion_matrix(trainer, val_dataset, id2label)
 
 wandb.finish()
-
-print("⬆️ Pushing to Hugging Face Hub...")
-trainer.push_to_hub()
 print("✅ Done!")

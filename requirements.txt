@@ -1,0 +1,8 @@
+torch
+transformers
+pandas
+numpy
+scikit-learn
+wandb
+python-dotenv
+accelerate>=0.26.0
