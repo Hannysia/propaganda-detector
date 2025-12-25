@@ -11,7 +11,7 @@ from transformers import (
     AutoModelForSequenceClassification, 
     TrainingArguments
 )
-from sklearn.model_selection import StratifiedGroupKFold  # <--- Додай це
+from sklearn.model_selection import StratifiedGroupKFold
 
 sys.path.append(os.getcwd())
 from src.data import PropagandaDataset
@@ -28,7 +28,7 @@ from src.utils import (
 DATA_PATH, HF_TOKEN = setup_environment()
 
 MODEL_NAME = "bert-base-uncased"
-RUN_NAME = f"balanced-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+RUN_NAME = f"span-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-baseline-bert"
 
 
@@ -59,6 +59,9 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
+special_tokens_dict = {'additional_special_tokens': ['<E>', '</E>']}
+num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+
 train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
 val_dataset = PropagandaDataset(val_df['context'].tolist(), [label2id[l] for l in val_df['label']], tokenizer)
 
@@ -79,6 +82,8 @@ model = AutoModelForSequenceClassification.from_pretrained(
     id2label=id2label,
     label2id=label2id
 )
+
+model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",

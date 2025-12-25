@@ -50,10 +50,21 @@ def build_dataset(raw_data_path):
             start, end = int(row['start']), int(row['end'])
             fragment = article_text[start:end]
             
-            context = fragment
+            context = f" <E> {fragment} </E> "
+            
             for sent in sentences:
                 if sent.start_char <= start < sent.end_char:
-                    context = sent.text
+                    rel_start = start - sent.start_char
+                    rel_end = end - sent.start_char
+                    
+                    context = (
+                        sent.text[:rel_start] + 
+                        " <E> " + 
+                        sent.text[rel_start:rel_end] + 
+                        " </E> " + 
+                        sent.text[rel_end:]
+                    )
+                    context = context.replace('\n', ' ').strip()
                     break
 
             record = {
