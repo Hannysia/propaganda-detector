@@ -14,11 +14,14 @@ from transformers import (
 from sklearn.model_selection import StratifiedGroupKFold  # <--- Додай це
 
 sys.path.append(os.getcwd())
-from src.data.dataset import PropagandaDataset
-from src.utils.metrics import compute_metrics, log_confusion_matrix 
-from src.utils.common import setup_environment, print_distribution
-from src.models.trainer import WeightedLossTrainer
-
+from src.data import PropagandaDataset
+from src.models import WeightedLossTrainer
+from src.utils import (
+    setup_environment, 
+    print_distribution, 
+    compute_metrics, 
+    log_confusion_matrix
+)
 
 
 # --- 1. CONFIG & SETUP ---
