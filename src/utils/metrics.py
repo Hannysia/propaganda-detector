@@ -23,21 +23,33 @@ def compute_metrics(eval_pred):
     }
 
 
-def log_confusion_matrix(trainer, val_dataset, id2label):
-
-    predictions_output = trainer.predict(val_dataset)
-    preds_id = np.argmax(predictions_output.predictions, axis=-1)
-    labels_id = predictions_output.label_ids
+def log_confusion_matrix(trainer, eval_dataset, id2label):
+    """
+        Draws a Confusion Matrix and sends it to WandB as an image.
+    """
     
-    preds_str = [id2label[i] for i in preds_id]
-    labels_str = [id2label[i] for i in labels_id]
-    class_names = list(id2label.values())
+    predictions = trainer.predict(eval_dataset)
+    preds = np.argmax(predictions.predictions, axis=1)
+    labels = predictions.label_ids
 
-    wandb.log({
-        "conf_mat": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=labels_id,
-            preds=preds_id,
-            class_names=class_names
-        )
-    })
+    class_names = [id2label[i] for i in range(len(id2label))]
+
+    cm = confusion_matrix(labels, preds, normalize='true')
+
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(
+        cm, 
+        annot=True, 
+        fmt='.2f', 
+        xticklabels=class_names, 
+        yticklabels=class_names,
+        cmap='Blues'
+    )
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.title('Normalized Confusion Matrix')
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+
+    wandb.log({"confusion_matrix_img": wandb.Image(plt)})
+    plt.close()
