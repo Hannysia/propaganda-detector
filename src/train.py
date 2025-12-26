@@ -28,9 +28,11 @@ from src.utils import (
 DATA_PATH, HF_TOKEN = setup_environment()
 
 MODEL_NAME = "bert-base-uncased"
+# У W&B це буде назва конкретного експерименту (з часом запуску)
 RUN_NAME = f"span-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
-HF_REPO_NAME = "hannusia123123/propaganda-baseline-bert"
 
+# Ця змінна лишається, щоб ми знали, куди пушити, ЯКЩО захочемо
+HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 
 # --- 2. PREPARE DATA ---
@@ -55,7 +57,6 @@ print_distribution(val_df, "VALIDATION")
 print("-" * 40)
 
 
-
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
@@ -70,7 +71,6 @@ train_labels = [x['labels'].item() for x in train_dataset]
 class_weights_arr = compute_class_weight("balanced", classes=np.unique(train_labels), y=train_labels)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class_weights = torch.tensor(class_weights_arr, dtype=torch.float).to(device)
-
 
 
 # --- 4. MODEL & TRAINING ---
@@ -95,10 +95,7 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
     save_total_limit=2,
-    push_to_hub=True,   
-    hub_model_id=HF_REPO_NAME,        
-    hub_token=HF_TOKEN,
-    hub_strategy="every_save"
+    push_to_hub=False,   
 )
 
 trainer = WeightedLossTrainer(
@@ -114,8 +111,6 @@ trainer = WeightedLossTrainer(
 print("🚀 Starting training...")
 trainer.train()
 
-print("⬆️ Final push to Hub...")
-trainer.push_to_hub()
 log_confusion_matrix(trainer, val_dataset, id2label)
 
 wandb.finish()
