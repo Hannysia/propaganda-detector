@@ -1,11 +1,11 @@
 torch
 transformers
 accelerate>=0.26.0
-numpy<2.0.0
-pandas==2.0.3
+pandas
+numpy
 scikit-learn
 tqdm
 wandb
 python-dotenv
-spacy==3.7.5
+spacy
 spacy-transformers
