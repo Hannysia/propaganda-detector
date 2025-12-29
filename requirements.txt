@@ -2,7 +2,7 @@ torch
 transformers
 accelerate>=0.26.0
 pandas
-numpy
+numpy<2.0.0
 scikit-learn
 tqdm
 wandb
