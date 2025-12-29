@@ -25,7 +25,7 @@ def build_dataset(raw_data_path):
         raise FileNotFoundError(f"Directory not found: {raw_data_path}")
 
     label_files = [f for f in os.listdir(raw_data_path) if f.endswith('.task2-TC.labels')]
-    
+
     print(f"Found {len(label_files)} label files in {raw_data_path}")
         
     for label_file in tqdm(label_files, desc="Articles processing"):
@@ -48,29 +48,50 @@ def build_dataset(raw_data_path):
         
         for _, row in df_labels.iterrows():
             start, end = int(row['start']), int(row['end'])
-            fragment = article_text[start:end]
             
-            context = f" <E> {fragment} </E> "
+            start_sent_idx = -1
+            end_sent_idx = -1
             
-            for sent in sentences:
+            for i, sent in enumerate(sentences):
                 if sent.start_char <= start < sent.end_char:
-                    rel_start = start - sent.start_char
-                    rel_end = end - sent.start_char
-                    
-                    context = (
-                        sent.text[:rel_start] + 
-                        " <E> " + 
-                        sent.text[rel_start:rel_end] + 
-                        " </E> " + 
-                        sent.text[rel_end:]
-                    )
-                    context = context.replace('\n', ' ').strip()
-                    break
+                    start_sent_idx = i
+                if sent.start_char < end <= sent.end_char:
+                    end_sent_idx = i
+            
+            if start_sent_idx == -1: continue
+            if end_sent_idx == -1: end_sent_idx = start_sent_idx
+
+            target_sentences = sentences[start_sent_idx : end_sent_idx + 1]
+            
+            span_start_char = target_sentences[0].start_char
+            span_end_char = target_sentences[-1].end_char
+            
+            raw_window = article_text[span_start_char : span_end_char]
+            
+            rel_start = start - span_start_char
+            rel_end = end - span_start_char
+            
+            context_tagged = (
+                raw_window[:rel_start] + 
+                " <E> " + 
+                raw_window[rel_start:rel_end] + 
+                " </E> " + 
+                raw_window[rel_end:]
+            )
+            
+            fragment_raw = article_text[start:end]
+            
+            context_clean = context_tagged.replace('\n', ' ').replace('\r', ' ').strip()
+            fragment_clean = fragment_raw.replace('\n', ' ').replace('\r', ' ').strip()
+            
+            import re
+            context_clean = re.sub(r'\s+', ' ', context_clean)
+            fragment_clean = re.sub(r'\s+', ' ', fragment_clean)
 
             record = {
                 'article_id': article_id,
-                'fragment': fragment,
-                'context': context,
+                'fragment': fragment_clean,
+                'context': context_clean,
                 'label': row['technique']
             }
             if record not in all_data:

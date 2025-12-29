@@ -26,12 +26,8 @@ from src.utils import (
 
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
-
 MODEL_NAME = "bert-base-uncased"
-# У W&B це буде назва конкретного експерименту (з часом запуску)
-RUN_NAME = f"span-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
-
-# Ця змінна лишається, щоб ми знали, куди пушити, ЯКЩО захочемо
+RUN_NAME = f"entity-masked-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 
