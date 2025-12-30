@@ -1,11 +1,25 @@
 torch
 transformers
 accelerate>=0.26.0
-pandas
-numpy
-scikit-learn
+numpy<2.0.0
+pandas<2.2.0
+matplotlib<3.8.0
+scikit-learn<1.4.0
+spacy==3.7.5
+spacy-transformers
 tqdm
 wandb
 python-dotenv
-spacy
-spacy-transformers
+
+
+# torch
+# transformers
+# accelerate>=0.26.0
+# pandas
+# numpy
+# scikit-learn
+# tqdm
+# wandb
+# python-dotenv
+# spacy
+# spacy-transformers
