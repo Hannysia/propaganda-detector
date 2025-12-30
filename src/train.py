@@ -56,7 +56,7 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-special_tokens_dict = {'additional_special_tokens': ['<E>', '</E>']}
+special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>", "[PERSON]", "[ORG]", "[LOC]", "[GROUP]"]}
 num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
 
 train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
