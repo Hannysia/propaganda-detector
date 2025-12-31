@@ -30,12 +30,6 @@ def mask_entities(text):
         if token.ent_type_:
             if token.ent_type_ == "PERSON":
                 new_tokens.append("[PERSON]")
-            elif token.ent_type_ == "ORG":
-                new_tokens.append("[ORG]")
-            elif token.ent_type_ in ["GPE", "LOC"]:
-                new_tokens.append("[LOC]")
-            elif token.ent_type_ == "NORP":
-                new_tokens.append("[GROUP]")
             else:
                 new_tokens.append(token.text)
         else:
@@ -46,9 +40,6 @@ def mask_entities(text):
     text = text.replace("< E >", "<E>").replace("</ E >", "</E>").replace("< E>", "<E>").replace("</ E>", "</E>")
     
     text = re.sub(r'(\[PERSON\]\s*)+', '[PERSON] ', text)
-    text = re.sub(r'(\[ORG\]\s*)+', '[ORG] ', text)
-    text = re.sub(r'(\[LOC\]\s*)+', '[LOC] ', text)
-    text = re.sub(r'(\[GROUP\]\s*)+', '[GROUP] ', text)
     
     text = re.sub(r'\s+([?.!,:;])', r'\1', text)
     
