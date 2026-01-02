@@ -27,7 +27,7 @@ from src.utils import (
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
 MODEL_NAME = "bert-base-uncased"
-RUN_NAME = f"entity-masked-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+RUN_NAME = f"fragment-tags-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 
@@ -56,7 +56,7 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>", "[PERSON]"]}
+special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
 num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
 
 train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
@@ -91,7 +91,8 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
     save_total_limit=2,
-    push_to_hub=False,   
+    push_to_hub=False,
+    fp16=True,
 )
 
 trainer = WeightedLossTrainer(
