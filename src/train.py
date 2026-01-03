@@ -17,7 +17,8 @@ sys.path.append(os.getcwd())
 from src.data import PropagandaDataset
 from src.models import WeightedLossTrainer
 from src.utils import (
-    setup_environment, 
+    setup_environment,
+    seed_everything, 
     print_distribution, 
     compute_metrics, 
     log_confusion_matrix
@@ -30,10 +31,12 @@ MODEL_NAME = "bert-base-uncased"
 RUN_NAME = f"fragment-tags-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
+seed_everything(42)
 
 # --- 2. PREPARE DATA ---
 print("📊 Loading and splitting data...")
 df = pd.read_csv(DATA_PATH)
+df = df.sort_values(by=['article_id', 'start_offset']).reset_index(drop=True)
 
 labels_list = sorted(df['label'].unique())
 label2id = {label: i for i, label in enumerate(labels_list)}
@@ -56,8 +59,8 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
-num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
+# special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
+# tokenizer.add_special_tokens(special_tokens_dict)
 
 train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
 val_dataset = PropagandaDataset(val_df['context'].tolist(), [label2id[l] for l in val_df['label']], tokenizer)
@@ -79,7 +82,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     label2id=label2id
 )
 
-model.resize_token_embeddings(len(tokenizer))
+# model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",

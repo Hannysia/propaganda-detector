@@ -73,9 +73,11 @@ def build_dataset(raw_data_path):
             
             context_tagged = (
                 raw_window[:rel_start] + 
-                " <E> " + 
+                # " <E> " + 
+                "" +
                 raw_window[rel_start:rel_end] + 
-                " </E> " + 
+                # " </E> " + 
+                "" +
                 raw_window[rel_end:]
             )
             
@@ -90,6 +92,7 @@ def build_dataset(raw_data_path):
 
             record = {
                 'article_id': article_id,
+                'start_offset': start,
                 'fragment': fragment_clean,
                 'context': context_clean,
                 'label': row['technique']

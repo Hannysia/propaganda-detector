@@ -1,6 +1,9 @@
 import os
 import wandb
+import random
 import pandas as pd
+import numpy as np
+import torch
 from dotenv import load_dotenv
 
 def setup_environment():
@@ -53,3 +56,15 @@ def print_distribution(df, name):
     
     dist_df = pd.concat([counts, percs], axis=1, keys=['Count', 'Percent %'])
     print(dist_df)
+
+
+
+def seed_everything(seed=42):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print(f"Seed set to {seed}")
