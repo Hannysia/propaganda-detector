@@ -18,7 +18,8 @@ from src.data import PropagandaDataset
 from src.models import WeightedLossTrainer
 from src.utils import (
     setup_environment,
-    seed_everything, 
+    seed_everything,
+    augment_rare_classes,
     print_distribution, 
     compute_metrics, 
     log_confusion_matrix
@@ -28,10 +29,11 @@ from src.utils import (
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
 MODEL_NAME = "bert-base-uncased"
-RUN_NAME = f"fragment-tags-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+RUN_NAME = f"tags-aug300-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
-seed_everything(42)
+SEED = 42
+seed_everything(SEED)
 
 # --- 2. PREPARE DATA ---
 print("📊 Loading and splitting data...")
@@ -43,14 +45,16 @@ label2id = {label: i for i, label in enumerate(labels_list)}
 id2label = {i: label for label, i in label2id.items()}
 
 print("✂️ Doing Stratified Group Split...")
-sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=SEED)
 train_index, val_index = next(sgkf.split(df['context'], df['label'], groups=df['article_id']))
 train_df = df.iloc[train_index]
 val_df = df.iloc[val_index]
 
+train_df = augment_rare_classes(train_df, min_samples=300, seed=SEED)
+
 print("-" * 40)
 
-print_distribution(train_df, "TRAIN")
+print_distribution(train_df, "TRAIN (AUGMENTED)")
 print_distribution(val_df, "VALIDATION")
 
 print("-" * 40)
@@ -59,8 +63,8 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
-# special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
-# tokenizer.add_special_tokens(special_tokens_dict)
+special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
+tokenizer.add_special_tokens(special_tokens_dict)
 
 train_dataset = PropagandaDataset(train_df['context'].tolist(), [label2id[l] for l in train_df['label']], tokenizer)
 val_dataset = PropagandaDataset(val_df['context'].tolist(), [label2id[l] for l in val_df['label']], tokenizer)
@@ -82,7 +86,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     label2id=label2id
 )
 
-# model.resize_token_embeddings(len(tokenizer))
+model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",

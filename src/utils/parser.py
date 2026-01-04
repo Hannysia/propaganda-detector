@@ -73,11 +73,9 @@ def build_dataset(raw_data_path):
             
             context_tagged = (
                 raw_window[:rel_start] + 
-                # " <E> " + 
-                "" +
+                " <E> " + 
                 raw_window[rel_start:rel_end] + 
-                # " </E> " + 
-                "" +
+                " </E> " + 
                 raw_window[rel_end:]
             )
             
