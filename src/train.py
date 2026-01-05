@@ -27,8 +27,8 @@ from src.utils import (
 
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
-MODEL_NAME = "bert-base-uncased"
-RUN_NAME = f"clean-tags-tuned-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+MODEL_NAME = "roberta-base"
+RUN_NAME = f"clean-tags-roberta-tuned-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
