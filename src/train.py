@@ -28,7 +28,7 @@ from src.utils import (
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
 MODEL_NAME = "microsoft/deberta-v3-base"
-RUN_NAME = f"clean-tags-deberta-tuned-{datetime.now().strftime('%d-%m-%H-%M')}"
+RUN_NAME = f"clean-tags-deberta-long-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
@@ -87,7 +87,7 @@ model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=5,             
+    num_train_epochs=10,             
     learning_rate=2e-5,             
     weight_decay=0.1,               
     warmup_ratio=0.1,              
