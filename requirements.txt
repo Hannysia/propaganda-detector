@@ -10,16 +10,4 @@ spacy-transformers
 tqdm
 wandb
 python-dotenv
-
-
-# torch
-# transformers
-# accelerate>=0.26.0
-# pandas
-# numpy
-# scikit-learn
-# tqdm
-# wandb
-# python-dotenv
-# spacy
-# spacy-transformers
+sentencepiece
