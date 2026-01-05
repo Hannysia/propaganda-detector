@@ -19,7 +19,6 @@ from src.models import WeightedLossTrainer
 from src.utils import (
     setup_environment,
     seed_everything,
-    augment_rare_classes,
     print_distribution, 
     compute_metrics, 
     log_confusion_matrix
@@ -29,7 +28,7 @@ from src.utils import (
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
 MODEL_NAME = "bert-base-uncased"
-RUN_NAME = f"tags-aug300-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
+RUN_NAME = f"clean-tags-tuned-bert-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
@@ -50,11 +49,9 @@ train_index, val_index = next(sgkf.split(df['context'], df['label'], groups=df['
 train_df = df.iloc[train_index]
 val_df = df.iloc[val_index]
 
-train_df = augment_rare_classes(train_df, min_samples=300, seed=SEED)
-
 print("-" * 40)
 
-print_distribution(train_df, "TRAIN (AUGMENTED)")
+print_distribution(train_df, "TRAIN")
 print_distribution(val_df, "VALIDATION")
 
 print("-" * 40)
@@ -90,14 +87,18 @@ model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=5,
+    num_train_epochs=5,             
+    learning_rate=2e-5,             
+    weight_decay=0.1,               
+    warmup_ratio=0.1,              
     per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
     eval_strategy="epoch",
     save_strategy="epoch",
     report_to="wandb",
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
-    save_total_limit=2,
+    save_total_limit=1,
     push_to_hub=False,
     fp16=True,
 )
