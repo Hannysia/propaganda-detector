@@ -80,7 +80,8 @@ model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME, 
     num_labels=len(labels_list),
     id2label=id2label,
-    label2id=label2id
+    label2id=label2id,
+    ignore_mismatched_sizes=True
 )
 
 model.resize_token_embeddings(len(tokenizer))
