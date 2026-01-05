@@ -81,7 +81,8 @@ model = AutoModelForSequenceClassification.from_pretrained(
     num_labels=len(labels_list),
     id2label=id2label,
     label2id=label2id,
-    ignore_mismatched_sizes=True
+    ignore_mismatched_sizes=True,
+    problem_type="single_label_classification"
 )
 
 model.resize_token_embeddings(len(tokenizer))
