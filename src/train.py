@@ -15,7 +15,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 
 sys.path.append(os.getcwd())
 from src.data import PropagandaDataset
-from src.models import WeightedLossTrainer
+from src.models import WeightedFocalLossTrainer
 from src.utils import (
     setup_environment,
     seed_everything,
@@ -24,11 +24,10 @@ from src.utils import (
     log_confusion_matrix
 )
 
-
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
-MODEL_NAME = "unitary/toxic-bert"
-RUN_NAME = f"clean-tags-unitary/toxic-bert-tuned-{datetime.now().strftime('%d-%m-%H-%M')}"
+MODEL_NAME = "roberta-base"
+RUN_NAME = f"focal-loss-weighted-roberta-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
@@ -105,7 +104,7 @@ training_args = TrainingArguments(
     fp16=True,
 )
 
-trainer = WeightedLossTrainer(
+trainer = WeightedFocalLossTrainer(
     class_weights=class_weights,
     model=model,
     args=training_args,
