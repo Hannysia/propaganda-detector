@@ -1,1 +1,1 @@
-from .trainer import WeightedLossTrainer
+from .trainer import WeightedFocalLossTrainer
