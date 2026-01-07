@@ -27,8 +27,8 @@ from src.utils import (
 
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
-MODEL_NAME = "xlnet-base-cased"
-RUN_NAME = f"cross_entropy-weighted-xlnet-{datetime.now().strftime('%d-%m-%H-%M')}"
+MODEL_NAME = "roberta-base"
+RUN_NAME = f"roberta-label-smoothing-0.1-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
@@ -92,9 +92,9 @@ model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=8,             
-    learning_rate=5e-6,
-    weight_decay=0.01,
+    num_train_epochs=5,
+    learning_rate=2e-5,       
+    weight_decay=0.1,
     warmup_ratio=0.1,               
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
