@@ -15,7 +15,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 
 sys.path.append(os.getcwd())
 from src.data import PropagandaDataset
-from src.models import WeightedFocalLossTrainer
+from src.models import WeightedLossTrainer
 from src.utils import (
     setup_environment,
     seed_everything,
@@ -24,10 +24,11 @@ from src.utils import (
     log_confusion_matrix
 )
 
+
 # --- 1. CONFIG & SETUP ---
 DATA_PATH, HF_TOKEN = setup_environment()
-MODEL_NAME = "roberta-base"
-RUN_NAME = f"focal-loss-weighted-roberta-{datetime.now().strftime('%d-%m-%H-%M')}"
+MODEL_NAME = "xlnet-base-cased"
+RUN_NAME = f"cross_entropy-weighted-xlnet-{datetime.now().strftime('%d-%m-%H-%M')}"
 HF_REPO_NAME = "hannusia123123/propaganda-technique-detector"
 
 SEED = 42
@@ -59,6 +60,9 @@ print("-" * 40)
 # --- 3. DATASETS & WEIGHTS ---
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
+if tokenizer.padding_side != 'left':
+    print("⚠️ Warning: XLNet should usually pad on the left. Checking config...")
+
 special_tokens_dict = {'additional_special_tokens': ["<E>", "</E>"]}
 tokenizer.add_special_tokens(special_tokens_dict)
 
@@ -88,10 +92,10 @@ model.resize_token_embeddings(len(tokenizer))
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=5,             
-    learning_rate=2e-5,             
-    weight_decay=0.01,               
-    warmup_ratio=0.1,              
+    num_train_epochs=7,             
+    learning_rate=3e-5,             
+    weight_decay=0.01,
+    warmup_ratio=0.1,               
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
     eval_strategy="epoch",
@@ -100,11 +104,10 @@ training_args = TrainingArguments(
     load_best_model_at_end=True,
     metric_for_best_model="f1_macro",
     save_total_limit=1,
-    push_to_hub=False,
-    fp16=True,
+    fp16=True,                      
 )
 
-trainer = WeightedFocalLossTrainer(
+trainer = WeightedLossTrainer(
     class_weights=class_weights,
     model=model,
     args=training_args,
