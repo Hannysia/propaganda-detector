@@ -7,6 +7,7 @@ import torch
 import wandb
 from datasets import load_dataset
 from sklearn.utils.class_weight import compute_class_weight
+from datetime import datetime
 from transformers import (
     AutoTokenizer, 
     AutoModelForSequenceClassification, 
@@ -47,9 +48,13 @@ def run_cv_pipeline(
     
     GLOBAL_SEED = 42
     seed_everything(GLOBAL_SEED)
+
+    # 👇 2. ГЕНЕРУЄМО ЧАСОВУ МІТКУ (Рік-Місяць-День_Година-Хвилина)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    run_id = f"{run_prefix}-{timestamp}"
     
-    print(f"🚀 STARTING PIPELINE FOR: {model_name}")
-    
+    print(f"🚀 STARTING PIPELINE: {run_id}")
+        
     print(f"☁️ Downloading data from Hugging Face: {source_dataset_repo}")
     dataset = load_dataset(source_dataset_repo, token=HF_TOKEN)
     df = dataset['train'].to_pandas()
@@ -116,7 +121,7 @@ def run_cv_pipeline(
         class_weights = torch.tensor(class_weights_arr, dtype=torch.float).to(device)
 
         # --- MODEL & TRAINING  ---
-        wandb.init(project="propaganda-detector", name=f"{run_prefix}-fold{fold}", group=run_prefix, reinit=True)
+        wandb.init(project="propaganda-detector", name=f"{run_prefix}-fold{fold}", group=run_id, reinit=True)
         wandb.config.update({"model_name": model_name, "fold_index": fold})
 
         model = AutoModelForSequenceClassification.from_pretrained(
