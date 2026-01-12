@@ -185,6 +185,11 @@ def run_cv_pipeline(
         fold_save_path = f"./results/fold{fold}_model"
         trainer.save_model(fold_save_path)
         tokenizer.save_pretrained(fold_save_path)
+
+        try:
+            api.create_branch(repo_id=hf_model_repo, branch=f"fold-{fold}", exist_ok=True)
+        except Exception as e:
+            print(f"⚠️ Branch creation warning: {e}")
         
         api.upload_folder(
             folder_path=fold_save_path,
