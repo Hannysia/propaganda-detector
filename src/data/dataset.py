@@ -1,8 +1,9 @@
 import torch
 
 class PropagandaDataset(torch.utils.data.Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=196):
-        self.encodings = tokenizer(texts, truncation=True, padding=True, max_length=max_length)
+    def __init__(self, texts, labels, tokenizer, **kwargs):
+        
+        self.encodings = tokenizer(texts, **kwargs)
         self.labels = labels
 
     def __getitem__(self, idx):
