@@ -136,6 +136,7 @@ def run_cv_pipeline(
 
         training_args = TrainingArguments(
             output_dir=f"./results/fold{fold}",
+            run_name=f"{run_id}-fold{fold}",
             num_train_epochs=num_train_epochs,
             learning_rate=learning_rate,
             weight_decay=weight_decay,
