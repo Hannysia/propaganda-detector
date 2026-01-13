@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import torch
 import wandb
+import shutil
 from datasets import load_dataset
 from sklearn.utils.class_weight import compute_class_weight
 from datetime import datetime
@@ -222,7 +223,6 @@ def run_cv_pipeline(
                 commit_message=f"New Best Model: Fold {fold} (F1={current_f1:.4f})"
             )
             
-        import shutil
         try:
             shutil.rmtree(fold_save_path)
         except:
@@ -233,11 +233,8 @@ def run_cv_pipeline(
         torch.cuda.empty_cache()
         gc.collect()
 
-
-
-        print(f"🧹 Cleaning up disk space for Fold {fold}...")
+        print(f"Cleaning up disk space for Fold {fold}...")
         try:
-            # Видаляємо папку з чекпоінтами САМЕ ЦЬОГО фолда
             shutil.rmtree(training_args.output_dir)
             print(f"✅ Deleted local checkpoint: {training_args.output_dir}")
         except Exception as e:
