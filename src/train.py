@@ -233,6 +233,16 @@ def run_cv_pipeline(
         torch.cuda.empty_cache()
         gc.collect()
 
+
+
+        print(f"🧹 Cleaning up disk space for Fold {fold}...")
+        try:
+            # Видаляємо папку з чекпоінтами САМЕ ЦЬОГО фолда
+            shutil.rmtree(training_args.output_dir)
+            print(f"✅ Deleted local checkpoint: {training_args.output_dir}")
+        except Exception as e:
+            print(f"⚠️ Could not cleanup: {e}")
+
     print("\n💾 Saving Final Datasets & Metadata...")
     safe_model_name = model_name.replace("/", "-")
     
