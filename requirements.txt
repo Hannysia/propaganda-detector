@@ -11,3 +11,5 @@ tqdm
 wandb
 python-dotenv
 sentencepiece
+catboost
+optuna
