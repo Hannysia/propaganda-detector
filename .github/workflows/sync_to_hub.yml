@@ -27,7 +27,7 @@ jobs:
           printf "app_port: 8501\n" >> hf_header.txt
           printf "tags:\n  - nlp\n  - propaganda-detection\n  - transformers\n" >> hf_header.txt
           printf "pinned: false\n" >> hf_header.txt
-          printf "short_description: Detect propaganda techniques using Stacking Ensemble (Transformers)\n" >> hf_header.txt
+          printf "short_description: Detect propaganda using Stacking Ensemble\n" >> hf_header.txt
           printf "license: mit\n" >> hf_header.txt
           printf -- "---\n\n" >> hf_header.txt
 
