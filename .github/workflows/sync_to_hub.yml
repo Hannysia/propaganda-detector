@@ -17,29 +17,27 @@ jobs:
 
       - name: Inject YAML Front Matter & Cleanup
         run: |
-          cat <<EOF > hf_header.txt
-          ---
-          title: Propaganda Detector
-          emoji: 📢
-          colorFrom: red
-          colorTo: gray
-          sdk: streamlit
-          app_file: deployment/app.py
-          app_port: 8501
-          tags:
-            - nlp
-            - propaganda-detection
-            - transformers
-          pinned: false
-          short_description: Detect propaganda techniques using Stacking Ensemble (Transformers)
-          license: mit
-          ---
-          
-          EOF
-          
+          printf -- "---\n" > hf_header.txt
+          printf "title: Propaganda Detector\n" >> hf_header.txt
+          printf "emoji: 📢\n" >> hf_header.txt
+          printf "colorFrom: red\n" >> hf_header.txt
+          printf "colorTo: gray\n" >> hf_header.txt
+          printf "sdk: streamlit\n" >> hf_header.txt
+          printf "app_file: deployment/app.py\n" >> hf_header.txt
+          printf "app_port: 8501\n" >> hf_header.txt
+          printf "tags:\n  - nlp\n  - propaganda-detection\n  - transformers\n" >> hf_header.txt
+          printf "pinned: false\n" >> hf_header.txt
+          printf "short_description: Detect propaganda techniques using Stacking Ensemble (Transformers)\n" >> hf_header.txt
+          printf "license: mit\n" >> hf_header.txt
+          printf -- "---\n\n" >> hf_header.txt
+
           cat hf_header.txt README.md > README_temp.md
           mv README_temp.md README.md
           
+          sed -i 's|deployment/screenshots/|https://raw.githubusercontent.com/Hannysia/propaganda-detector/main/deployment/screenshots/|g' README.md
+          
+          rm -rf deployment/screenshots
+
           rm -rf .github
           rm hf_header.txt
 
@@ -47,7 +45,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           
           git add .
-          git commit -m "Deploy: Inject metadata and cleanup for Hugging Face"
+          git commit -m "Deploy: Inject metadata and fix image links for HF"
 
       - name: Push to Hub
         env:
@@ -56,5 +54,4 @@ jobs:
           HF_SPACE_NAME: propaganda-detector
         run: |
           git remote add space https://hannusia123123:$HF_TOKEN@huggingface.co/spaces/hannusia123123/propaganda-detector
-          
           git push --force space main
