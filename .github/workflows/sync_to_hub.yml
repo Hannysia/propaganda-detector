@@ -34,10 +34,6 @@ jobs:
           cat hf_header.txt README.md > README_temp.md
           mv README_temp.md README.md
           
-          sed -i 's|deployment/screenshots/|https://raw.githubusercontent.com/Hannysia/propaganda-detector/main/deployment/screenshots/|g' README.md
-          
-          rm -rf deployment/screenshots
-
           rm -rf .github
           rm hf_header.txt
 
@@ -45,7 +41,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           
           git add .
-          git commit -m "Deploy: Inject metadata and fix image links for HF"
+          git commit -m "Deploy: Inject metadata for Hugging Face"
 
       - name: Push to Hub
         env:

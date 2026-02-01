@@ -10,12 +10,6 @@ This project implements a robust **Ensemble Learning system** to detect and clas
 
 ### 👉 [Try the Live Demo Here](https://huggingface.co/spaces/hannusia123123/propaganda-detector) 👈
 
-### 📸 Interface Preview
-<div style="display: flex; gap: 10px;">
-  <img src="deployment/screenshots/demo_preview_1.png" width="48%" />
-  <img src="deployment/screenshots/demo_preview_2.png" width="48%" />
-</div>
-
 ---
 
 ## 🧠 System Architecture
