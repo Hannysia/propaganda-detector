@@ -1,0 +1,10 @@
+-r requirements.txt
+
+accelerate>=0.26.0
+scikit-learn<1.4.0
+optuna
+tqdm
+wandb
+python-dotenv
+matplotlib<3.8.0
+seaborn

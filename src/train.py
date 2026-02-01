@@ -50,7 +50,6 @@ def run_cv_pipeline(
     GLOBAL_SEED = 42
     seed_everything(GLOBAL_SEED)
 
-    # 👇 2. ГЕНЕРУЄМО ЧАСОВУ МІТКУ (Рік-Місяць-День_Година-Хвилина)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
     run_id = f"{run_prefix}-{timestamp}"
     

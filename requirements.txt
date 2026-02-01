@@ -1,15 +1,10 @@
-# torch
-transformers
-accelerate>=0.26.0
-numpy<2.0.0
+streamlit
 pandas<2.2.0
-matplotlib<3.8.0
-scikit-learn<1.4.0
-spacy==3.7.5
-spacy-transformers
-tqdm
-wandb
-python-dotenv
-sentencepiece
+transformers>=4.30.0
+torch>=2.0.0
+numpy<2.0.0
 catboost
-optuna
+spacy==3.7.5
+huggingface_hub
+sentencepiece
+datasets
