@@ -1,20 +1,3 @@
----
-title: Propaganda Detector
-emoji: 🚀
-colorFrom: red
-colorTo: red
-sdk: streamlit
-app_file: deployment/app.py
-app_port: 8501
-tags:
-  - nlp
-  - propaganda-detection
-  - transformers
-pinned: false
-short_description: Detect propaganda techniques using Stacking Ensemble (Transformers)
-license: mit
----
-
 # 📢 Propaganda Technique Detector
 
 [![Python](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/)
