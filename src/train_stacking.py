@@ -1,24 +1,13 @@
 import os
 import pandas as pd
-import numpy as np
 import json
 import optuna
-import shutil
-
 from sklearn.model_selection import train_test_split
-from catboost import CatBoostClassifier, Pool
+from catboost import CatBoostClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import f1_score, classification_report
 from huggingface_hub import HfApi, hf_hub_download
 optuna.logging.set_verbosity(optuna.logging.WARNING)
-
-try:
-    import catboost
-    import optuna
-except ImportError:
-    os.system("pip install catboost optuna -q")
-    from catboost import CatBoostClassifier
-    import optuna
 
 BASE_MODELS = [
     "roberta-base",

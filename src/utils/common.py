@@ -2,11 +2,7 @@ import os
 import random
 import pandas as pd
 import numpy as np
-from sklearn.utils import resample
 import torch
-from dotenv import load_dotenv
-
-
 
 def print_distribution(df, name):
     """Displays statistics on class distribution in the dataset"""
@@ -19,8 +15,6 @@ def print_distribution(df, name):
     
     dist_df = pd.concat([counts, percs], axis=1, keys=['Count', 'Percent %'])
     print(dist_df)
-
-
 
 def seed_everything(seed=42):
     random.seed(seed)

@@ -1,7 +1,5 @@
-import spacy
 import os
 import pandas as pd
-import numpy as np
 from tqdm import tqdm
 from sklearn.model_selection import StratifiedGroupKFold
 from datasets import Dataset
