@@ -1,10 +1,9 @@
-streamlit
-pandas<2.2.0
+pandas
 transformers>=4.30.0
-torch --index-url https://download.pytorch.org/whl/cpu
-numpy<2.0.0
+torch
+numpy
 catboost
-spacy==3.7.5
+spacy
 huggingface_hub
+tokenizers
 sentencepiece
-datasets
