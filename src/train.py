@@ -18,14 +18,11 @@ from transformers import (
 from huggingface_hub import HfApi
 
 sys.path.append(os.getcwd())
-from src.data import PropagandaDataset
-from src.models import WeightedLossTrainer
-from src.utils import (
-    seed_everything,
-    compute_metrics,
-    print_distribution,
-    log_confusion_matrix
-)
+from src.data.dataset import PropagandaDataset
+from src.models.trainer import WeightedLossTrainer
+
+from src.utils.common import seed_everything, print_distribution
+from src.utils.metrics import compute_metrics, log_confusion_matrix
 
 
 # --- 1. CONFIG & SETUP ---

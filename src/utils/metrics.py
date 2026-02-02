@@ -24,9 +24,6 @@ def compute_metrics(eval_pred):
 
 
 def log_confusion_matrix(trainer, eval_dataset, id2label):
-    """
-        Draws a Confusion Matrix and sends it to WandB as an image.
-    """
     
     predictions = trainer.predict(eval_dataset)
     preds = np.argmax(predictions.predictions, axis=1)

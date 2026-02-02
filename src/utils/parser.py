@@ -4,7 +4,7 @@ from tqdm import tqdm
 from sklearn.model_selection import StratifiedGroupKFold
 from datasets import Dataset
 from dotenv import load_dotenv
-from .preprocessor import get_tagged_context
+from src.utils.preprocessor import get_tagged_context
 load_dotenv()
 
 # --- CONFIGURATION ---
