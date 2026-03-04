@@ -51,8 +51,9 @@ def run_si_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        data_dir="span_identification", 
-        token=HF_TOKEN
+        name="span_identification", # ВАЖЛИВО: Використовуй 'name' замість 'data_dir' для конфігурацій
+        token=HF_TOKEN,
+        download_mode="force_redownload" # Це змусить HF переписати кеш схем
     )
     
     train_data = dataset['train']
@@ -88,7 +89,8 @@ def run_si_pipeline(
 
     # --- 5. MODEL SETUP ---
     model = PropagandaSpanDetector(model_name=model_name, num_labels=3)
-
+    model = model.float()
+    
     # --- 6. TRAINING ARGUMENTS ---
     training_args = TrainingArguments(
         output_dir=f"./results_si/{run_id}",
@@ -112,7 +114,8 @@ def run_si_pipeline(
         metric_for_best_model="f1_symbolic", 
         greater_is_better=True,
         save_total_limit=1,
-        fp16=torch.cuda.is_available(), 
+        fp16=False,
+        bf16=False,
         push_to_hub=False 
     )
 
@@ -127,8 +130,10 @@ def run_si_pipeline(
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         compute_metrics=compute_metrics_wrapper, 
-        tokenizer=tokenizer 
+        processing_class=tokenizer 
     )
+
+    trainer.use_amp = False
 
     # --- 8. TRAINING LOOP ---
     print("🚀 Starting training...")
