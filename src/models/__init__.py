@@ -1,1 +1,2 @@
-from .trainer import WeightedLossTrainer, PropagandaSpanDetector
+from .trainer import WeightedLossTrainer, SITrainer
+from .span_detector import PropagandaSpanDetector
