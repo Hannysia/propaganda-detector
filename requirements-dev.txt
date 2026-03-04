@@ -13,3 +13,5 @@ python-dotenv
 sentencepiece
 catboost
 optuna
+datasets
+pytorch-crf

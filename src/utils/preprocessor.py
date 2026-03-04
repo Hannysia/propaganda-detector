@@ -75,3 +75,37 @@ def get_tagged_context(text, fragment=None, start_char=None, end_char=None):
     final_context = normalize_text(clean_punctuation(context_tagged.replace('\n', ' ')))
     
     return final_context, final_fragment, None
+
+
+def extract_spans_from_tags(tags, offsets):
+    """
+    Converts BIO tags (0, 1, 2) back to character coordinates (start, end).
+    """
+    spans = []
+    current_start = None
+    prev_end = None
+    
+    for tag, offset in zip(tags, offsets):
+        if tag == -100 or offset == [0, 0] or offset == (0, 0):
+            continue
+            
+        start_char, end_char = offset
+        
+        if tag == 1:
+            if current_start is not None:
+                spans.append((current_start, prev_end))
+            current_start = start_char
+        elif tag == 2:
+            if current_start is None: 
+                current_start = start_char 
+        elif tag == 0:
+            if current_start is not None:
+                spans.append((current_start, prev_end))
+                current_start = None
+                
+        prev_end = end_char
+        
+    if current_start is not None:
+        spans.append((current_start, prev_end))
+        
+    return spans
