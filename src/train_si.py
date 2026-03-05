@@ -90,6 +90,9 @@ def run_si_pipeline(
     # --- 5. MODEL SETUP ---
     model = PropagandaSpanDetector(model_name=model_name, num_labels=3)
     model = model.float()
+
+    for param in model.parameters():
+        param.data = param.data.contiguous()
     
     # --- 6. TRAINING ARGUMENTS ---
     training_args = TrainingArguments(
