@@ -82,6 +82,7 @@ def extract_spans_from_tags(tags, offsets):
     """
     spans = []
     start_char = None
+    last_end_char = None
 
     for tag, offset in zip(tags, offsets):
 
@@ -89,22 +90,31 @@ def extract_spans_from_tags(tags, offsets):
             continue
             
         if tag == 4:
+            if start_char is not None:
+                spans.append((start_char, last_end_char))
             spans.append((offset[0], offset[1]))
             start_char = None
             
         elif tag == 1:
+            if start_char is not None:
+                spans.append((start_char, last_end_char))
             start_char = offset[0]
             
         elif tag == 3:
             if start_char is not None:
-
                 spans.append((start_char, offset[1]))
                 start_char = None
             else:
-
                 spans.append((offset[0], offset[1]))
                 
         elif tag == 0:
-            start_char = None
-                        
+            if start_char is not None:
+                spans.append((start_char, last_end_char))
+                start_char = None
+                
+        last_end_char = offset[1]
+
+    if start_char is not None and last_end_char is not None:
+        spans.append((start_char, last_end_char))
+        
     return spans
