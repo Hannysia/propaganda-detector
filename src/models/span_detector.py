@@ -4,7 +4,7 @@ import torch.nn as nn
 from torchcrf import CRF
 
 class PropagandaSpanDetector(nn.Module):
-    def __init__(self, model_name="microsoft/deberta-v3-base", num_labels=3):
+    def __init__(self, model_name="microsoft/deberta-v3-base", num_labels=5):
         super(PropagandaSpanDetector, self).__init__()
         self.config = AutoConfig.from_pretrained(model_name)        
         self.encoder = AutoModel.from_pretrained(model_name)
