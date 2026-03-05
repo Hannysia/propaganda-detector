@@ -1,3 +1,5 @@
+%%writefile src/models/span_detector.py
+
 from transformers import AutoModel, AutoConfig
 import torch
 import torch.nn as nn
@@ -8,8 +10,12 @@ class PropagandaSpanDetector(nn.Module):
         super(PropagandaSpanDetector, self).__init__()
         self.config = AutoConfig.from_pretrained(model_name)        
         self.encoder = AutoModel.from_pretrained(model_name)
-        self.dropout = nn.Dropout(self.config.hidden_dropout_prob)
+        
+        dropout_prob = getattr(self.config, "hidden_dropout_prob", getattr(self.config, "dropout", 0.1))
+        self.dropout = nn.Dropout(dropout_prob)
+        
         self.classifier = nn.Linear(self.config.hidden_size, num_labels)
+        
         self.crf = CRF(num_labels, batch_first=True)
 
     def forward(self, input_ids, attention_mask, labels=None):
