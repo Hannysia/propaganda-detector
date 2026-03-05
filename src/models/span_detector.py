@@ -18,17 +18,17 @@ class PropagandaSpanDetector(nn.Module):
         
         sequence_output = self.dropout(sequence_output)
         emissions = self.classifier(sequence_output)
+
+        crf_mask = attention_mask.bool()
         
         if labels is not None:
-            mask = (labels != -100)
             clean_labels = labels.clone()
             clean_labels[labels == -100] = 0
             
-            loss = -self.crf(emissions, clean_labels, mask=mask, reduction='mean')
+            loss = -self.crf(emissions, clean_labels, mask=crf_mask, reduction='mean')
             return loss
         else:
-            mask = (attention_mask == 1)
-            preds = self.crf.decode(emissions, mask=mask)
+            preds = self.crf.decode(emissions, mask=crf_mask)
             
             seq_len = emissions.size(1)
             padded_preds = []
