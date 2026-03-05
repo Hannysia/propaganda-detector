@@ -1,5 +1,3 @@
-%%writefile src/models/span_detector.py
-
 from transformers import AutoModel, AutoConfig
 import torch
 import torch.nn as nn
