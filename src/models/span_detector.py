@@ -2,6 +2,8 @@ from transformers import AutoModel, AutoConfig
 import torch
 import torch.nn as nn
 from torchcrf import CRF
+import torch.nn.functional as F
+
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=2.0):
