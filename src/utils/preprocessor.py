@@ -76,45 +76,36 @@ def get_tagged_context(text, fragment=None, start_char=None, end_char=None):
     
     return final_context, final_fragment, None
 
+
 def extract_spans_from_tags(tags, offsets):
     """
-    Converts BIOES tags (0, 1, 2, 3, 4) back to character coordinates (start, end).
+    Converts BIO tags (0, 1, 2) back to character coordinates (start, end).
     """
     spans = []
-    start_char = None
-    last_end_char = None
-
+    current_start = None
+    prev_end = None
+    
     for tag, offset in zip(tags, offsets):
-
-        if offset[0] == 0 and offset[1] == 0:
+        if tag == -100 or offset == [0, 0] or offset == (0, 0):
             continue
             
-        if tag == 4:
-            if start_char is not None:
-                spans.append((start_char, last_end_char))
-            spans.append((offset[0], offset[1]))
-            start_char = None
-            
-        elif tag == 1:
-            if start_char is not None:
-                spans.append((start_char, last_end_char))
-            start_char = offset[0]
-            
-        elif tag == 3:
-            if start_char is not None:
-                spans.append((start_char, offset[1]))
-                start_char = None
-            else:
-                spans.append((offset[0], offset[1]))
-                
+        start_char, end_char = offset
+        
+        if tag == 1:
+            if current_start is not None:
+                spans.append((current_start, prev_end))
+            current_start = start_char
+        elif tag == 2:
+            if current_start is None: 
+                current_start = start_char 
         elif tag == 0:
-            if start_char is not None:
-                spans.append((start_char, last_end_char))
-                start_char = None
+            if current_start is not None:
+                spans.append((current_start, prev_end))
+                current_start = None
                 
-        last_end_char = offset[1]
-
-    if start_char is not None and last_end_char is not None:
-        spans.append((start_char, last_end_char))
+        prev_end = end_char
+        
+    if current_start is not None:
+        spans.append((current_start, prev_end))
         
     return spans

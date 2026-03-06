@@ -34,41 +34,31 @@ class PropagandaSIDataset(Dataset):
                 
                 labels = torch.zeros_like(input_ids, dtype=torch.long)
                 
-                token_span_indices = []
-                for start_char, end_char in offset_mapping:
-
+                previous_span_idx = -1 
+                
+                for j, (start_char, end_char) in enumerate(offset_mapping):
+                    
                     if start_char == 0 and end_char == 0:
-                        token_span_indices.append(-100)
+                        labels[j] = -100
+                        previous_span_idx = -1
                         continue
                         
-                    matched_span = -1
+                    current_span_idx = -1
+                    
                     for span_idx, span in enumerate(spans):
                         if start_char < span['end'] and end_char > span['start']: 
-                            matched_span = span_idx
+                            current_span_idx = span_idx
                             break
-                    token_span_indices.append(matched_span)
-                    
-                for j in range(len(token_span_indices)):
-                    span_idx = token_span_indices[j]
-                    
-                    if span_idx == -100:
-                        labels[j] = -100
-                        continue
-                    if span_idx == -1:
-                        labels[j] = 0
-                        continue
-                        
-                    is_start = (j == 0) or (token_span_indices[j-1] != span_idx)
-                    is_end = (j == len(token_span_indices) - 1) or (token_span_indices[j+1] != span_idx)
-                    
-                    if is_start and is_end:
-                        labels[j] = 4
-                    elif is_start:
-                        labels[j] = 1
-                    elif is_end:
-                        labels[j] = 3
+                            
+                    if current_span_idx != -1:
+                        if current_span_idx != previous_span_idx:
+                            labels[j] = 1 
+                        else:
+                            labels[j] = 2 
                     else:
-                        labels[j] = 2
+                        labels[j] = 0 
+                        
+                    previous_span_idx = current_span_idx
                         
                 self.all_windows.append({
                     "input_ids": input_ids,

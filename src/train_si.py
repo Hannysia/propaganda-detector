@@ -51,9 +51,9 @@ def run_si_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        name="span_identification", 
+        name="span_identification", # ВАЖЛИВО: Використовуй 'name' замість 'data_dir' для конфігурацій
         token=HF_TOKEN,
-        download_mode="force_redownload"
+        download_mode="force_redownload" # Це змусить HF переписати кеш схем
     )
     
     train_data = dataset['train']
@@ -83,13 +83,12 @@ def run_si_pipeline(
     print("⚖️ Calculating Pos Weight for Trainer...")
     all_labels = [label for item in train_dataset for label in item['labels'] if label != -100]
     counts = np.bincount(all_labels)
-
-    propaganda_count = sum(counts[1:]) if len(counts) > 1 else 1e-9
-    pos_weight = counts[0] / (propaganda_count + 1e-9)
+    
+    pos_weight = counts[0] / (counts[1] + counts[2] + 1e-9)
     print(f"⚖️ Pos Weight set to: {pos_weight:.2f}")
 
     # --- 5. MODEL SETUP ---
-    model = PropagandaSpanDetector(model_name=model_name, num_labels=5)
+    model = PropagandaSpanDetector(model_name=model_name, num_labels=3)
     model = model.float()
 
     for param in model.parameters():

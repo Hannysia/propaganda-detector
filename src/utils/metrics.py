@@ -92,16 +92,10 @@ def get_exact_match_metrics(pred_spans_list, true_spans_list):
 
 def log_si_confusion_matrix(flat_labels, flat_preds):
     
-    id2label = {
-    0: "O", 
-    1: "B-PROP", 
-    2: "I-PROP", 
-    3: "E-PROP",
-    4: "S-PROP"
-}
-    class_names = [id2label[i] for i in range(5)]
+    id2label = {0: "O", 1: "B-PROP", 2: "I-PROP"}
+    class_names = [id2label[i] for i in range(3)]
 
-    cm = confusion_matrix(flat_labels, flat_preds, labels=[0, 1, 2, 3, 4], normalize='true')
+    cm = confusion_matrix(flat_labels, flat_preds, labels=[0, 1, 2], normalize='true')
 
     plt.figure(figsize=(8, 6))
     sns.heatmap(
