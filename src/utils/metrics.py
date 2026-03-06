@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, confusion_matrix
 import torch
-from src.utils.preprocessor import extract_spans_from_tags
+from src.utils.preprocessor import extract_spans_from_tags, merge_close_spans
 
 
 def compute_metrics(eval_pred):
@@ -111,7 +111,7 @@ def log_si_confusion_matrix(flat_labels, flat_preds):
     plt.close()
 
 
-def compute_si_metrics(eval_preds, eval_dataset):
+def compute_si_metrics(eval_preds, eval_dataset, merge_threshold=0):
     predictions, labels = eval_preds.predictions, eval_preds.label_ids
     
     all_pred_indices, all_true_indices = [], []
@@ -128,8 +128,15 @@ def compute_si_metrics(eval_preds, eval_dataset):
                 flat_pred_tags.append(p_tag)
                 flat_true_tags.append(t_tag)
         
-        pred_spans = extract_spans_from_tags(pred_tags, offsets)
+        raw_pred_spans = extract_spans_from_tags(pred_tags, offsets)
+        
+        if merge_threshold > 0:
+            pred_spans = merge_close_spans(raw_pred_spans, threshold=merge_threshold)
+        else:
+            pred_spans = raw_pred_spans
+        
         true_spans = extract_spans_from_tags(true_tags, offsets)
+
         all_pred_spans.append(pred_spans)
         all_true_spans.append(true_spans)
         

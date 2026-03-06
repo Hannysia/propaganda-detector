@@ -33,6 +33,7 @@ def run_si_pipeline(
     gradient_accumulation_steps: int = 1,
     max_length: int = 512,
     stride: int = 128,
+    merge_threshold: int = 2,
     source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
 ):
     # --- 1. SETUP ---
@@ -51,9 +52,9 @@ def run_si_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        name="span_identification", # ВАЖЛИВО: Використовуй 'name' замість 'data_dir' для конфігурацій
+        name="span_identification",
         token=HF_TOKEN,
-        download_mode="force_redownload" # Це змусить HF переписати кеш схем
+        download_mode="force_redownload"
     )
     
     train_data = dataset['train']
@@ -122,9 +123,14 @@ def run_si_pipeline(
         push_to_hub=False 
     )
 
-# --- 7. TRAINER INITIALIZATION ---
-    def compute_metrics_wrapper(eval_preds):
-        return compute_si_metrics(eval_preds, eval_dataset=val_dataset)
+    # --- 7. TRAINER INITIALIZATION ---    
+    def compute_metrics_wrapper(eval_pred):
+    
+        return compute_si_metrics(
+            eval_preds=eval_pred, 
+            eval_dataset=val_dataset,       
+            merge_threshold=merge_threshold 
+        )
 
     trainer = SITrainer(
         pos_weight=pos_weight, 

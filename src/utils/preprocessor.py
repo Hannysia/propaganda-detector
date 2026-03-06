@@ -76,7 +76,6 @@ def get_tagged_context(text, fragment=None, start_char=None, end_char=None):
     
     return final_context, final_fragment, None
 
-
 def extract_spans_from_tags(tags, offsets):
     """
     Converts BIO tags (0, 1, 2) back to character coordinates (start, end).
@@ -109,3 +108,23 @@ def extract_spans_from_tags(tags, offsets):
         spans.append((current_start, prev_end))
         
     return spans
+
+def merge_close_spans(spans, threshold):
+    """
+    Sticks together spans if the distance between them is less than or equal to threshold (in characters).
+    """
+    if not spans:
+        return []
+        
+    spans = sorted(spans, key=lambda x: x[0])
+    merged = [spans[0]]
+    
+    for current in spans[1:]:
+        previous = merged[-1]
+        
+        if current[0] - previous[1] <= threshold:
+            merged[-1] = (previous[0], max(previous[1], current[1]))
+        else:
+            merged.append(current)
+            
+    return merged
