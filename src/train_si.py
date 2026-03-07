@@ -7,7 +7,7 @@ import numpy as np
 from datetime import datetime
 from datasets import load_dataset
 from huggingface_hub import HfApi
-from transformers import AutoTokenizer, TrainingArguments
+from transformers import AutoTokenizer, TrainingArguments, EarlyStoppingCallback
 
 sys.path.append(os.getcwd())
 
@@ -37,6 +37,7 @@ def run_si_pipeline(
     focal_weight: float = 1.0,
     custom_dropout: float = 0.1,
     push_model_to_hub: bool = True,
+    early_stopping_patience: int = 3,
     source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
 ):
     # --- 1. SETUP ---
@@ -152,7 +153,8 @@ def run_si_pipeline(
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
         compute_metrics=compute_metrics_wrapper, 
-        processing_class=tokenizer 
+        processing_class=tokenizer,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)]
     )
 
     trainer.use_amp = False
