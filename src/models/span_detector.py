@@ -33,15 +33,6 @@ class PropagandaSpanDetector(nn.Module):
         super(PropagandaSpanDetector, self).__init__()
         self.config = AutoConfig.from_pretrained(model_name)        
         self.encoder = AutoModel.from_pretrained(model_name)
-
-        hidden_size = self.config.hidden_size
-        self.bilstm = nn.LSTM(
-            input_size=hidden_size,
-            hidden_size=hidden_size // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True
-        )
         
         dropout_prob = getattr(self.config, "hidden_dropout_prob", getattr(self.config, "dropout", 0.1))
         self.dropout = nn.Dropout(dropout_prob)
@@ -51,14 +42,14 @@ class PropagandaSpanDetector(nn.Module):
         self.crf = CRF(num_labels, batch_first=True)
         self.focal_loss = FocalLoss(gamma=2.0)
 
+        self.focal_weight = getattr(self.config, "focal_weight", 1.0)
+
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state
-
-        lstm_output, _ = self.bilstm(sequence_output)
-
-        lstm_output = self.dropout(lstm_output)
-        emissions = self.classifier(lstm_output)
+        
+        sequence_output = self.dropout(sequence_output)
+        emissions = self.classifier(sequence_output)
 
         crf_mask = attention_mask.bool()
         
@@ -70,11 +61,13 @@ class PropagandaSpanDetector(nn.Module):
             focal_loss = self.focal_loss(emissions, labels, crf_mask)
 
             if self.training and torch.rand(1).item() < 0.05:
-                print(f"DEBUG: CRF={crf_loss.item():.4f}, Focal={focal_loss.item():.4f}")
+                weighted_focal = self.focal_weight * focal_loss.item()
+                print(f"DEBUG: CRF={crf_loss.item():.4f}, Focal_Weighted={weighted_focal:.4f}")
 
-            total_loss = crf_loss + focal_loss
+            total_loss = crf_loss + (self.focal_weight * focal_loss)
 
             return total_loss
+
         else:
             preds = self.crf.decode(emissions, mask=crf_mask)
             

@@ -33,7 +33,9 @@ def run_si_pipeline(
     gradient_accumulation_steps: int = 1,
     max_length: int = 512,
     stride: int = 128,
-    merge_threshold: int = 2,
+    merge_threshold: int = 0,
+    focal_weight: float = 1.0,
+    push_model_to_hub: bool = True,
     source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
 ):
     # --- 1. SETUP ---
@@ -89,12 +91,20 @@ def run_si_pipeline(
     print(f"⚖️ Pos Weight set to: {pos_weight:.2f}")
 
     # --- 5. MODEL SETUP ---
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained(model_name)
+    config.focal_weight = focal_weight
+
     model = PropagandaSpanDetector(model_name=model_name, num_labels=3)
+    model.config = config
+
+    model.focal_weight = focal_weight 
+
     model = model.float()
 
     for param in model.parameters():
         param.data = param.data.contiguous()
-    
+
     # --- 6. TRAINING ARGUMENTS ---
     training_args = TrainingArguments(
         output_dir=f"./results_si/{run_id}",
@@ -149,24 +159,27 @@ def run_si_pipeline(
     trainer.train()
 
     # --- 9. SAVING BEST MODEL TO HF ---
-    print(f"🔥 Training finished. Uploading best {run_prefix} model to HF...")
-    
-    best_model_path = f"./best_model_si/{run_prefix}"
-    
-    trainer.save_model(best_model_path)
-    tokenizer.save_pretrained(best_model_path)
-    
-    try:
-        api.create_repo(repo_id=hf_model_repo, exist_ok=True)
-        api.upload_folder(
-            folder_path=best_model_path,
-            repo_id=hf_model_repo,
-            path_in_repo=run_prefix,
-            commit_message=f"Add best {run_prefix} model from run {run_id}"
-        )
-        print(f"✅ Successfully uploaded to HF: https://huggingface.co/{hf_model_repo}/tree/main/{run_prefix}")
-    except Exception as e:
-        print(f"❌ Upload failed: {e}")
+    if push_model_to_hub:
+        print(f"🔥 Training finished. Uploading best {run_prefix} model to HF...")
+        
+        best_model_path = f"./best_model_si/{run_prefix}"
+        
+        trainer.save_model(best_model_path)
+        tokenizer.save_pretrained(best_model_path)
+        
+        try:
+            api.create_repo(repo_id=hf_model_repo, exist_ok=True)
+            api.upload_folder(
+                folder_path=best_model_path,
+                repo_id=hf_model_repo,
+                path_in_repo=run_prefix,
+                commit_message=f"Add best {run_prefix} model from run {run_id}"
+            )
+            print(f"✅ Successfully uploaded to HF: https://huggingface.co/{hf_model_repo}/tree/main/{run_prefix}")
+        except Exception as e:
+            print(f"❌ Upload failed: {e}")
+    else:
+        print("🛑 Sweep mode: skipping model save and Hugging Face upload.")
 
     # --- 10. CLEANUP ---
     wandb.finish()
