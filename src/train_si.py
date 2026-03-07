@@ -35,6 +35,7 @@ def run_si_pipeline(
     stride: int = 128,
     merge_threshold: int = 0,
     focal_weight: float = 1.0,
+    custom_dropout: float = 0.1,
     push_model_to_hub: bool = True,
     source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
 ):
@@ -95,11 +96,13 @@ def run_si_pipeline(
     config = AutoConfig.from_pretrained(model_name)
     config.focal_weight = focal_weight
 
-    model = PropagandaSpanDetector(model_name=model_name, num_labels=3)
-    model.config = config
+    if hasattr(config, "hidden_dropout_prob"):
+        config.hidden_dropout_prob = custom_dropout
+    if hasattr(config, "dropout"):
+        config.dropout = custom_dropout
 
+    model = PropagandaSpanDetector(model_name=model_name, num_labels=3, config=config)
     model.focal_weight = focal_weight 
-
     model = model.float()
 
     for param in model.parameters():

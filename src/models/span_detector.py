@@ -29,11 +29,11 @@ class FocalLoss(nn.Module):
         return focal_loss.mean()
 
 class PropagandaSpanDetector(nn.Module):
-    def __init__(self, model_name="microsoft/deberta-v3-base", num_labels=3):
+    def __init__(self, model_name="microsoft/deberta-v3-base", num_labels=3, config=None):
         super(PropagandaSpanDetector, self).__init__()
-        self.config = AutoConfig.from_pretrained(model_name)        
-        self.encoder = AutoModel.from_pretrained(model_name)
-        
+        self.config = config if config is not None else AutoConfig.from_pretrained(model_name)
+        self.encoder = AutoModel.from_pretrained(model_name, config=self.config)
+
         dropout_prob = getattr(self.config, "hidden_dropout_prob", getattr(self.config, "dropout", 0.1))
         self.dropout = nn.Dropout(dropout_prob)
         
