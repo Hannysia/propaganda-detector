@@ -107,6 +107,9 @@ def run_cv(model_name):
         model.focal_weight = cfg["focal_weight"]
         model = model.float()
 
+        for param in model.parameters():
+                    param.data = param.data.contiguous()
+
         training_args = TrainingArguments(
             output_dir=f"./cv_results/{model_name}_fold{fold+1}",
             num_train_epochs=NUM_EPOCHS,
@@ -149,17 +152,24 @@ def run_cv(model_name):
         print(f"🔍 Generating OOF predictions for fold {fold+1}...")
         model.eval()
         from torch.utils.data import DataLoader
-        from transformers import default_data_collator
+
+        def safe_collate(features):
+            batch = {}
+            batch["input_ids"] = torch.stack([torch.tensor(f["input_ids"], dtype=torch.long) for f in features])
+            batch["attention_mask"] = torch.stack([torch.tensor(f["attention_mask"], dtype=torch.long) for f in features])
+            if "token_type_ids" in features[0]:
+                batch["token_type_ids"] = torch.stack([torch.tensor(f["token_type_ids"], dtype=torch.long) for f in features])
+            return batch
         
-        val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"] * 2, collate_fn=default_data_collator)
-        
+        val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"] * 2, collate_fn=safe_collate)
+
         all_probs = []
         with torch.no_grad():
             for batch in val_dataloader:
-                input_ids = batch["input_ids"].to(model.device)
-                attention_mask = batch["attention_mask"].to(model.device)
-                
-                outputs = model.encoder(input_ids=input_ids, attention_mask=attention_mask)
+                device = next(model.parameters()).device
+                batch_inputs = {k: v.to(device) for k, v in batch.items()}
+
+                outputs = model.encoder(**batch_inputs)
                 sequence_output = outputs.last_hidden_state
                 emissions = model.classifier(sequence_output) 
                 
