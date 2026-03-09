@@ -147,14 +147,29 @@ def run_cv(model_name):
         trainer.train()
 
         print(f"🔍 Generating OOF predictions for fold {fold+1}...")
-        predictions = trainer.predict(val_dataset)
-        logits = predictions.predictions 
-        probs = F.softmax(torch.tensor(logits), dim=-1).numpy()
+        model.eval()
+        from torch.utils.data import DataLoader
+        from transformers import default_data_collator
+        
+        val_dataloader = DataLoader(val_dataset, batch_size=cfg["batch_size"] * 2, collate_fn=default_data_collator)
+        
+        all_probs = []
+        with torch.no_grad():
+            for batch in val_dataloader:
+                input_ids = batch["input_ids"].to(model.device)
+                attention_mask = batch["attention_mask"].to(model.device)
+                
+                outputs = model.encoder(input_ids=input_ids, attention_mask=attention_mask)
+                sequence_output = outputs.last_hidden_state
+                emissions = model.classifier(sequence_output) 
+                
+                probs = F.softmax(emissions, dim=-1).cpu().numpy()
+                all_probs.extend(probs)
 
         for i, window in enumerate(val_dataset.all_windows):
             oof_predictions.append({
                 "article_id": window["article_id"],
-                "probs": probs[i], 
+                "probs": all_probs[i],
                 "offset_mapping": window["offset_mapping"],
                 "attention_mask": window["attention_mask"],
                 "labels": window["labels"] 
