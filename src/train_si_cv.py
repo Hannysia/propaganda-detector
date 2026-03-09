@@ -11,6 +11,7 @@ from datasets import load_dataset
 from transformers import AutoTokenizer, TrainingArguments, EarlyStoppingCallback, AutoConfig
 import torch.nn.functional as F
 from huggingface_hub import HfApi
+import wandb
 
 sys.path.append(os.getcwd())
 
@@ -83,6 +84,8 @@ def run_cv(model_name):
         print(f"FOLD {fold+1} / 5")
         print("="*40)
 
+        wandb.init(project="propaganda-detector-cv", name=f"{model_name}_fold{fold+1}", reinit=True)
+
         train_data = [all_data[i] for i in train_idx]
         val_data = [all_data[i] for i in val_idx]
 
@@ -122,7 +125,7 @@ def run_cv(model_name):
             greater_is_better=True,
             save_total_limit=1,
             fp16=False,
-            report_to="none" 
+            report_to="wandb" 
         )
 
         def compute_metrics_wrapper(eval_pred):
@@ -174,6 +177,8 @@ def run_cv(model_name):
             print("✅ Backup successfully saved to HF!")
         except Exception as e:
             print(f"❌ Backup upload failed: {e}")
+
+        wandb.finish()
 
         del model, trainer, train_dataset, val_dataset
         torch.cuda.empty_cache()
