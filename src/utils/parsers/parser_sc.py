@@ -56,7 +56,7 @@ def build_dataset(raw_data_path):
 
     for txt_file in tqdm(txt_files, desc="Parsing sentences"):
         article_id = txt_file.stem
-        label_file = raw_path / f"{article_id}.task-si.labels"
+        label_file = raw_path / f"{article_id}.task1-SI.labels"
         
         try:
             with open(txt_file, 'r', encoding='utf-8') as f:

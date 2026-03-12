@@ -9,18 +9,22 @@ from datasets import load_dataset
 from huggingface_hub import HfApi
 from transformers import (
     AutoTokenizer, 
-    AutoModelForSequenceClassification, 
+    AutoModelForSequenceClassification,
+    AutoConfig,
     TrainingArguments, 
     Trainer, 
     EarlyStoppingCallback,
     DataCollatorWithPadding
 )
+
 from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
 from src.models.trainer import WeightedLossTrainer
+from src.utils.metrics import compute_metrics, log_confusion_matrix
 import torch.nn as nn
 
 sys.path.append(os.getcwd())
 from src.utils.common import seed_everything
+
 
 # --- 1. CONFIG & SETUP ---
 HF_TOKEN = os.getenv("HF_TOKEN")
@@ -86,15 +90,26 @@ def run_sc_pipeline(
     print(f"⚖️ Class Weights: Clean(0)={weight_0:.2f}, Propaganda(1)={weight_1:.2f}")
 
     # --- 5. MODEL SETUP ---
+    id2label = {0: "Clean", 1: "Propaganda"}
+    label2id = {"Clean": 0, "Propaganda": 1}
+
     from transformers import AutoConfig
-    config = AutoConfig.from_pretrained(model_name, num_labels=2)
+    config = AutoConfig.from_pretrained(
+        model_name, 
+        num_labels=2,
+        id2label=id2label,
+        label2id=label2id
+    )
     
     if hasattr(config, "hidden_dropout_prob"):
         config.hidden_dropout_prob = custom_dropout
     if hasattr(config, "attention_probs_dropout_prob"):
         config.attention_probs_dropout_prob = custom_dropout
 
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, config=config)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, 
+        config=config
+    )
 
     # --- 6. TRAINING ARGUMENTS ---
     training_args = TrainingArguments(
@@ -117,30 +132,26 @@ def run_sc_pipeline(
         metric_for_best_model="f1",
         greater_is_better=True,
         save_total_limit=1,
-        fp16=True,
+        fp16=False,
         push_to_hub=False 
     )
 
-    # --- 7. TRAINER INITIALIZATION ---    
-    def compute_metrics(eval_pred):
-        logits, labels = eval_pred
-        preds = np.argmax(logits, axis=1)
-        return {
-            "accuracy": accuracy_score(labels, preds),
-            "precision": precision_score(labels, preds, zero_division=0),
-            "recall": recall_score(labels, preds, zero_division=0),
-            "f1": f1_score(labels, preds, zero_division=0),
-        }
-
+    # --- 7. TRAINER INITIALIZATION ---
     trainer = WeightedLossTrainer(
         class_weights=class_weights,
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        tokenizer=tokenizer,
-        data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
-        compute_metrics=compute_metrics,
+        processing_class=tokenizer,
+        data_collator=DataCollatorWithPadding(tokenizer=tokenizer),        
+        compute_metrics=lambda eval_pred: compute_metrics(
+            eval_pred, 
+            average='binary', 
+            pos_label=1, 
+            include_fbeta=True
+        ),
+        
         callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)]
     )
 
@@ -155,16 +166,9 @@ def run_sc_pipeline(
     y_true = eval_results.label_ids
     
     probs = torch.nn.functional.softmax(torch.tensor(logits), dim=-1).numpy()
-    y_preds = np.argmax(probs, axis=1)
     
-    wandb.log({"pr_curve": wandb.plot.pr_curve(y_true, probs, labels=["Clean", "Propaganda"])})
-    
-    wandb.log({"conf_mat": wandb.plot.confusion_matrix(
-        probs=None, 
-        y_true=y_true, 
-        preds=y_preds, 
-        class_names=["Clean", "Propaganda"]
-    )})
+    wandb.log({"pr_curve": wandb.plot.pr_curve(y_true, probs, labels=["Clean", "Propaganda"])})    
+    log_confusion_matrix(trainer, val_dataset, id2label)
 
     # --- 10. SAVING BEST MODEL TO HF ---
     if push_model_to_hub:

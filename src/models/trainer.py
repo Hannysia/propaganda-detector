@@ -8,13 +8,16 @@ class WeightedLossTrainer(Trainer):
         self.class_weights = class_weights
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        labels = inputs.get("labels")
+        labels = inputs.pop("labels")
+        
         outputs = model(**inputs)
-        logits = outputs.get("logits")
+        logits = outputs.logits
         
-        loss_fct = nn.CrossEntropyLoss(weight=self.class_weights)
+        logits = logits.to(torch.float32)
+        weight = self.class_weights.to(device=model.device, dtype=torch.float32)
         
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        loss_fct = nn.CrossEntropyLoss(weight=weight)
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1).long())
         
         return (loss, outputs) if return_outputs else loss
     

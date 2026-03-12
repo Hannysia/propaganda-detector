@@ -2,27 +2,31 @@ import numpy as np
 import wandb
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, confusion_matrix
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, confusion_matrix, fbeta_score
 import torch
 from src.utils.preprocessor import extract_spans_from_tags, merge_close_spans
 
 
-def compute_metrics(eval_pred):
-    
+def compute_metrics(eval_pred, average='macro', pos_label=1, include_fbeta=False):
     logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
+    preds = np.argmax(logits, axis=1)
     
-    f1_macro = f1_score(labels, predictions, average='macro')
-    acc = accuracy_score(labels, predictions)
-    precision_macro = precision_score(labels, predictions, average='macro', zero_division=0)
-    recall_macro = recall_score(labels, predictions, average='macro', zero_division=0)
+    kwargs = {"average": average, "zero_division": 0}
+    if average == 'binary':
+        kwargs["pos_label"] = pos_label
     
-    return {
-        "accuracy": acc,
-        "f1_macro": f1_macro,
-        "precision_macro": precision_macro,
-        "recall_macro": recall_macro
+    metrics = {
+        "accuracy": accuracy_score(labels, preds),
+        "precision": precision_score(labels, preds, **kwargs),
+        "recall": recall_score(labels, preds, **kwargs),
+        "f1": f1_score(labels, preds, **kwargs),
     }
+    
+    if include_fbeta:
+        metrics["f2"] = fbeta_score(labels, preds, beta=2.0, **kwargs)
+        metrics["f3"] = fbeta_score(labels, preds, beta=3.0, **kwargs)
+        
+    return metrics
 
 
 def log_confusion_matrix(trainer, eval_dataset, id2label):
