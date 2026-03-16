@@ -43,6 +43,7 @@ def run_sc_pipeline(
     custom_dropout: float = 0.1,
     push_model_to_hub: bool = True,
     early_stopping_patience: int = 2,
+    recall_boost: float = 1.0,
     source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
 ):
     # --- 1. SETUP ---
@@ -98,7 +99,7 @@ def run_sc_pipeline(
     labels = train_dataset['label']
     counts = np.bincount(labels)
     weight_0 = 1.0
-    weight_1 = counts[0] / (counts[1] + 1e-9)
+    weight_1 = counts[0] / (counts[1] + 1e-9) * recall_boost
     class_weights = torch.tensor([weight_0, weight_1], dtype=torch.float)
     print(f"⚖️ Class Weights: Clean(0)={weight_0:.2f}, Propaganda(1)={weight_1:.2f}")
 
@@ -152,6 +153,8 @@ def run_sc_pipeline(
     # --- 7. TRAINER INITIALIZATION ---
     trainer = WeightedLossTrainer(
         class_weights=class_weights,
+        loss_type="focal",
+        gamma=2.0,
         model=model,
         args=training_args,
         train_dataset=train_dataset,

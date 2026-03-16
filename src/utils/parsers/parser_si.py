@@ -1,213 +1,215 @@
 import os
-import sys
-import gc
-import torch
-import wandb
-import numpy as np
-from datetime import datetime
-from datasets import load_dataset
-from huggingface_hub import HfApi
-from transformers import (
-    AutoTokenizer, 
-    AutoModelForSequenceClassification,
-    AutoConfig,
-    TrainingArguments, 
-    Trainer, 
-    EarlyStoppingCallback,
-    DataCollatorWithPadding
-)
+import json
+import spacy
+from pathlib import Path
+from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+from datasets import Dataset, DatasetDict
+from dotenv import load_dotenv
+from collections import defaultdict
+import pandas as pd
 
-from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
-from src.models.trainer import WeightedLossTrainer
-from src.utils.metrics import compute_metrics, log_confusion_matrix
-import torch.nn as nn
+load_dotenv()
 
-sys.path.append(os.getcwd())
-from src.utils.common import seed_everything
-
-
-# --- 1. CONFIG & SETUP ---
+# --- CONFIGURATION ---
+HF_DATASET_REPO = "hannusia123123/propaganda-detector-dataset"
 HF_TOKEN = os.getenv("HF_TOKEN")
+VAL_SIZE = 0.15
+RANDOM_SEED = 42
 
-def run_sc_pipeline(
-    model_name: str = "microsoft/deberta-v3-base",
-    hf_model_repo: str = "hannusia123123/deberta-sentence-classifier",
-    run_prefix: str = "sc-deberta",
-    batch_size: int = 16,
-    learning_rate: float = 2e-5,
-    weight_decay: float = 0.01,
-    num_train_epochs: int = 4,
-    warmup_ratio: float = 0.1,
-    lr_scheduler_type: str = "cosine",
-    max_length: int = 256,
-    custom_dropout: float = 0.1,
-    push_model_to_hub: bool = True,
-    early_stopping_patience: int = 2,
-    source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
-):
-    # --- 1. SETUP ---
-    GLOBAL_SEED = 42
-    seed_everything(GLOBAL_SEED)
-    api = HfApi()
+SPACY_MODEL = "en_core_web_sm" 
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    run_id = f"{run_prefix}-{timestamp}"
-    print(f"🚀 STARTING SC PIPELINE: {run_id}")
-    
-    wandb.init(project="propaganda-detector-sc", name=run_id, config=locals())
+# --- PATHS SETUP ---
+RAW_PATH = 'data/raw'
+PROCESSED_PATH = 'data/processed'
 
-    # --- 2. DATA DOWNLOAD  ---
-    print(f"☁️ Downloading preprocessed data from Hugging Face: {source_dataset_repo}")
+os.makedirs(PROCESSED_PATH, exist_ok=True)
 
-    dataset = load_dataset(
-        source_dataset_repo, 
-        name="si_sc_dataset",
-        token=HF_TOKEN,
-        download_mode="force_redownload"
-    )
-    
-    train_data = dataset['train']
-    val_data = dataset['validation']
-    print(f"📊 Data Loaded: Train={len(train_data)}, Val={len(val_data)}")
+def load_spans(label_file_path):
+    spans = []
+    if not label_file_path.exists():
+        return spans
+    with open(label_file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                spans.append((int(parts[1]), int(parts[2])))
+    return spans
 
-    # --- 3. TOKENIZER & PREPROCESSING ---
-    print("⚙️ Initializing Tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+def check_overlap(sent_start, sent_end, spans):
+    for span_start, span_end in spans:
+        if max(sent_start, span_start) < min(sent_end, span_end):
+            return 1
+    return 0
 
-    def tokenize_fn(examples):
-        combined_texts = []
+def get_local_spans(sent_start, sent_end, global_spans):
+    local_spans = []
+    for span_start, span_end in global_spans:
+        if max(sent_start, span_start) < min(sent_end, span_end):
+            overlap_start = max(sent_start, span_start)
+            overlap_end = min(sent_end, span_end)
+            local_spans.append([overlap_start - sent_start, overlap_end - sent_start])
+    return local_spans
 
-        for p, t, n in zip(examples["prev_text"], examples["text"], examples["next_text"]):
+def build_dataset(raw_data_path):
+    all_data = []
+    raw_path = Path(raw_data_path)
 
-            p_safe = p if p is not None else ""
-            t_safe = t if t is not None else ""
-            n_safe = n if n is not None else ""
-            
-            combined = f"{p_safe} {tokenizer.sep_token} {t_safe} {tokenizer.sep_token} {n_safe}".strip()
-            combined = " ".join(combined.split()) 
-            
-            combined_texts.append(combined)
-            
-        return tokenizer(combined_texts, truncation=True, max_length=max_length)
+    if not raw_path.exists():
+        raise FileNotFoundError(f"Directory not found: {raw_data_path}")
 
-    train_dataset = train_data.map(tokenize_fn, batched=True)
-    val_dataset = val_data.map(tokenize_fn, batched=True)
+    txt_files = sorted(list(raw_path.glob("*.txt")))
+    print(f"🔍 Found {len(txt_files)} articles in {raw_data_path}")
 
-    # --- 4. CLASS WEIGHTS CALCULATION ---
-    print("⚖️ Calculating Class Weights for Trainer...")
-    labels = train_dataset['label']
-    counts = np.bincount(labels)
-    weight_0 = 1.0
-    weight_1 = counts[0] / (counts[1] + 1e-9)
-    class_weights = torch.tensor([weight_0, weight_1], dtype=torch.float)
-    print(f"⚖️ Class Weights: Clean(0)={weight_0:.2f}, Propaganda(1)={weight_1:.2f}")
+    nlp = spacy.load(SPACY_MODEL)
 
-    # --- 5. MODEL SETUP ---
-    id2label = {0: "Clean", 1: "Propaganda"}
-    label2id = {"Clean": 0, "Propaganda": 1}
-
-    from transformers import AutoConfig
-    config = AutoConfig.from_pretrained(
-        model_name, 
-        num_labels=2,
-        id2label=id2label,
-        label2id=label2id
-    )
-    
-    if hasattr(config, "hidden_dropout_prob"):
-        config.hidden_dropout_prob = custom_dropout
-    if hasattr(config, "attention_probs_dropout_prob"):
-        config.attention_probs_dropout_prob = custom_dropout
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, 
-        config=config
-    )
-
-    # --- 6. TRAINING ARGUMENTS ---
-    training_args = TrainingArguments(
-        output_dir=f"./results_sc/{run_id}",
-        run_name=run_id,
-        num_train_epochs=num_train_epochs,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size * 2, 
-        optim="adamw_torch",
-        learning_rate=learning_rate,
-        weight_decay=weight_decay,
-        max_grad_norm=1.0,
-        lr_scheduler_type=lr_scheduler_type,
-        warmup_ratio=warmup_ratio,
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        logging_steps=10,
-        report_to="wandb",
-        load_best_model_at_end=True,
-        metric_for_best_model="f2",
-        greater_is_better=True,
-        save_total_limit=1,
-        fp16=False,
-        push_to_hub=False 
-    )
-
-    # --- 7. TRAINER INITIALIZATION ---
-    trainer = WeightedLossTrainer(
-        class_weights=class_weights,
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
-        processing_class=tokenizer,
-        data_collator=DataCollatorWithPadding(tokenizer=tokenizer),        
-        compute_metrics=lambda eval_pred: compute_metrics(
-            eval_pred, 
-            average='binary', 
-            pos_label=1, 
-            include_fbeta=True
-        ),
-        
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)]
-    )
-
-    # --- 8. TRAINING LOOP ---
-    print("🚀 Starting training...")
-    trainer.train()
-
-    # --- 9. WANDB CUSTOM PLOTS (PR Curve & Confusion Matrix) ---
-    print("📊 Generating custom W&B evaluation plots...")
-    eval_results = trainer.predict(val_dataset)
-    logits = eval_results.predictions
-    y_true = eval_results.label_ids
-    
-    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=-1).numpy()
-    
-    wandb.log({"pr_curve": wandb.plot.pr_curve(y_true, probs, labels=["Clean", "Propaganda"])})    
-    log_confusion_matrix(trainer, val_dataset, id2label)
-
-    # --- 10. SAVING BEST MODEL TO HF ---
-    if push_model_to_hub:
-        print(f"🔥 Training finished. Uploading best {run_prefix} model to HF...")
-        best_model_path = f"./best_model_sc/{run_prefix}"
-        trainer.save_model(best_model_path)
-        tokenizer.save_pretrained(best_model_path)
+    for txt_file in tqdm(txt_files, desc="Parsing articles & merging sentences"):
+        article_id = txt_file.stem
+        label_file = raw_path / f"{article_id}.task1-SI.labels"
         
         try:
-            api.create_repo(repo_id=hf_model_repo, exist_ok=True)
-            api.upload_folder(
-                folder_path=best_model_path,
-                repo_id=hf_model_repo,
-                commit_message=f"Add best {run_prefix} model from run {run_id}"
-            )
-            print(f"✅ Successfully uploaded to HF: https://huggingface.co/{hf_model_repo}")
-        except Exception as e:
-            print(f"❌ Upload failed: {e}")
+            with open(txt_file, 'r', encoding='utf-8') as f:
+                article_text = f.read()
+                
+            spans = load_spans(label_file)
+            doc = nlp(article_text)
+            
+            # --- SMART MERGING LOGIC ---
+            merged_sents = []
+            for sent in doc.sents:
+                text_slice = article_text[sent.start_char:sent.end_char]
+                stripped_test = text_slice.strip()
+                
+                if not merged_sents:
+                    merged_sents.append({
+                        "start_char": sent.start_char, 
+                        "end_char": sent.end_char, 
+                        "text": text_slice
+                    })
+                    continue
+                
+                has_alnum = any(c.isalnum() for c in stripped_test)
+                if len(stripped_test) < 5 or not has_alnum:
+                    merged_sents[-1]["end_char"] = sent.end_char
+                    merged_sents[-1]["text"] = article_text[merged_sents[-1]["start_char"]:sent.end_char]
+                else:
+                    merged_sents.append({
+                        "start_char": sent.start_char, 
+                        "end_char": sent.end_char, 
+                        "text": text_slice
+                    })
 
-    # --- 11. CLEANUP ---
-    wandb.finish()
-    del model, trainer, train_dataset, val_dataset
-    torch.cuda.empty_cache()
-    gc.collect()
+            # --- CONTEXT WINDOW GENERATION ---
+            for idx, m_sent in enumerate(merged_sents):
+                start_c = m_sent["start_char"]
+                end_c = m_sent["end_char"]
+                text = m_sent["text"]
+                
+                prev_text = merged_sents[idx - 1]["text"] if idx > 0 else ""
+                next_text = merged_sents[idx + 1]["text"] if idx < len(merged_sents) - 1 else ""
+                
+                label = check_overlap(start_c, end_c, spans)
+                local_spans = get_local_spans(start_c, end_c, spans)
+                
+                all_data.append({
+                    "article_id": article_id,
+                    "sentence_idx": idx,
+                    "start_char": start_c,
+                    "end_char": end_c,
+                    "prev_text": prev_text,
+                    "text": text,
+                    "next_text": next_text,
+                    "propaganda_spans": local_spans,
+                    "label": label
+                })
+
+        except Exception as e:
+            print(f"❌ Error processing {article_id}: {e}")
+
+    # --- STATISTICS ---
+    total = len(all_data)
+    propaganda = sum(1 for d in all_data if d["label"] == 1)
+    clean = total - propaganda
     
-    print("🏁 SC Pipeline Finished.")
+    print(f"\n📊 DATASET STATISTICS:")
+    print(f"Total sentences: {total}")
+    print(f"Propaganda (1): {propaganda} | Clean (0): {clean}")
+    if total > 0:
+        print(f"Balance: {propaganda/total:.2%}")
+
+    return all_data
+
+def process_dataset(data):
+    articles = defaultdict(list)
+    for item in data:
+        articles[item["article_id"]].append(item)
+        
+    article_ids = list(articles.keys())
+    article_densities = []
+    
+    for art_id in article_ids:
+        sents = articles[art_id]
+        prop_count = sum(1 for s in sents if s["label"] == 1)
+        density = prop_count / len(sents) if len(sents) > 0 else 0
+        article_densities.append(density)
+        
+    bins = [-1, 0.0001, 0.10, 0.25, 1.0]
+    labels = [0, 1, 2, 3]
+    categories = pd.cut(article_densities, bins=bins, labels=labels)
+    
+    train_ids, val_ids = train_test_split(
+        article_ids, 
+        test_size=VAL_SIZE, 
+        random_state=RANDOM_SEED, 
+        stratify=categories
+    )
+    
+    train_ids_set = set(train_ids)
+    val_ids_set = set(val_ids)
+    
+    train_data = [item for item in data if item["article_id"] in train_ids_set]
+    val_data = [item for item in data if item["article_id"] in val_ids_set]
+    
+    train_prop = sum(1 for d in train_data if d["label"] == 1)
+    val_prop = sum(1 for d in val_data if d["label"] == 1)
+    
+    print(f"✅ Article-level Split successful!")
+    print(f"   Train: {len(train_data)} sentences (Propaganda ratio: {train_prop/len(train_data):.2%})")
+    print(f"   Val:   {len(val_data)} sentences (Propaganda ratio: {val_prop/len(val_data):.2%})")
+    
+    return train_data, val_data
 
 if __name__ == "__main__":
-    run_sc_pipeline()
+    print("🚀 Starting dataset generation process...")
+    full_data = build_dataset(RAW_PATH)
+
+    train_data, val_data = process_dataset(full_data)
+    
+    output_file = os.path.join(PROCESSED_PATH, 'si_dataset.jsonl')
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for item in full_data:
+            f.write(json.dumps(item, ensure_ascii=False) + '\n')
+            
+    print(f"\n✅ Local dataset saved to: {output_file}")
+    
+    if HF_TOKEN:
+        hf_config_name = "si_sc_dataset"
+        print(f"☁️ Uploading to Hugging Face: {HF_DATASET_REPO} (Config: {hf_config_name})...")
+        try:
+            dataset_dict = DatasetDict({
+                'full': Dataset.from_list(full_data),
+                'train': Dataset.from_list(train_data),
+                'validation': Dataset.from_list(val_data)
+            })
+            
+            dataset_dict.push_to_hub(
+                HF_DATASET_REPO, 
+                config_name=hf_config_name,
+                token=HF_TOKEN,
+                private=True
+            )
+            print("🎉 Dataset pushed to Hugging Face successfully in JSONL format!")
+        except Exception as e:
+            print(f"❌ Failed to upload to Hugging Face: {e}")
+    else:
+        print("⚠️ HF_TOKEN not found in environment variables. Upload skipped.")
