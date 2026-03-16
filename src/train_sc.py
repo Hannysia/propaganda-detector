@@ -39,7 +39,7 @@ def run_sc_pipeline(
     num_train_epochs: int = 4,
     warmup_ratio: float = 0.1,
     lr_scheduler_type: str = "cosine",
-    max_length: int = 128,
+    max_length: int = 256,
     custom_dropout: float = 0.1,
     push_model_to_hub: bool = True,
     early_stopping_patience: int = 2,
@@ -61,7 +61,7 @@ def run_sc_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        name="sentence_classification",
+        name="si_sc_dataset",
         token=HF_TOKEN,
         download_mode="force_redownload"
     )
@@ -73,9 +73,22 @@ def run_sc_pipeline(
     # --- 3. TOKENIZER & PREPROCESSING ---
     print("⚙️ Initializing Tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
+
     def tokenize_fn(examples):
-        return tokenizer(examples["text"], truncation=True, max_length=max_length)
+        combined_texts = []
+
+        for p, t, n in zip(examples["prev_text"], examples["text"], examples["next_text"]):
+
+            p_safe = p if p is not None else ""
+            t_safe = t if t is not None else ""
+            n_safe = n if n is not None else ""
+            
+            combined = f"{p_safe} {tokenizer.sep_token} {t_safe} {tokenizer.sep_token} {n_safe}".strip()
+            combined = " ".join(combined.split()) 
+            
+            combined_texts.append(combined)
+            
+        return tokenizer(combined_texts, truncation=True, max_length=max_length)
 
     train_dataset = train_data.map(tokenize_fn, batched=True)
     val_dataset = val_data.map(tokenize_fn, batched=True)
@@ -129,7 +142,7 @@ def run_sc_pipeline(
         logging_steps=10,
         report_to="wandb",
         load_best_model_at_end=True,
-        metric_for_best_model="f1",
+        metric_for_best_model="f2",
         greater_is_better=True,
         save_total_limit=1,
         fp16=False,

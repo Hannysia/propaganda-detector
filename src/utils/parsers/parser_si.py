@@ -1,134 +1,213 @@
 import os
-import json
-import pandas as pd
-from pathlib import Path
-from tqdm import tqdm
-from sklearn.model_selection import train_test_split
-from datasets import Dataset, DatasetDict
-from dotenv import load_dotenv
+import sys
+import gc
+import torch
+import wandb
+import numpy as np
+from datetime import datetime
+from datasets import load_dataset
+from huggingface_hub import HfApi
+from transformers import (
+    AutoTokenizer, 
+    AutoModelForSequenceClassification,
+    AutoConfig,
+    TrainingArguments, 
+    Trainer, 
+    EarlyStoppingCallback,
+    DataCollatorWithPadding
+)
 
-load_dotenv()
+from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
+from src.models.trainer import WeightedLossTrainer
+from src.utils.metrics import compute_metrics, log_confusion_matrix
+import torch.nn as nn
 
-# --- CONFIGURATION ---
-HF_DATASET_REPO = "hannusia123123/propaganda-detector-dataset"
+sys.path.append(os.getcwd())
+from src.utils.common import seed_everything
+
+
+# --- 1. CONFIG & SETUP ---
 HF_TOKEN = os.getenv("HF_TOKEN")
-VAL_SIZE = 0.15
-RANDOM_SEED = 42
 
-# --- PATHS SETUP ---
-RAW_PATH = 'data/raw'
-PROCESSED_PATH = 'data/processed'
+def run_sc_pipeline(
+    model_name: str = "microsoft/deberta-v3-base",
+    hf_model_repo: str = "hannusia123123/deberta-sentence-classifier",
+    run_prefix: str = "sc-deberta",
+    batch_size: int = 16,
+    learning_rate: float = 2e-5,
+    weight_decay: float = 0.01,
+    num_train_epochs: int = 4,
+    warmup_ratio: float = 0.1,
+    lr_scheduler_type: str = "cosine",
+    max_length: int = 256,
+    custom_dropout: float = 0.1,
+    push_model_to_hub: bool = True,
+    early_stopping_patience: int = 2,
+    source_dataset_repo: str = "hannusia123123/propaganda-detector-dataset"
+):
+    # --- 1. SETUP ---
+    GLOBAL_SEED = 42
+    seed_everything(GLOBAL_SEED)
+    api = HfApi()
 
-os.makedirs(PROCESSED_PATH, exist_ok=True)
-
-def build_dataset(raw_data_path):
-    all_data = []
-
-    raw_path = Path(raw_data_path)
-
-    if not raw_path.exists():
-        raise FileNotFoundError(f"Directory not found: {raw_data_path}")
-
-    txt_files = sorted(list(raw_path.glob("*.txt")))
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    run_id = f"{run_prefix}-{timestamp}"
+    print(f"🚀 STARTING SC PIPELINE: {run_id}")
     
-    print(f"🔍 Found {len(txt_files)} articles in {raw_data_path}")
+    wandb.init(project="propaganda-detector-sc", name=run_id, config=locals())
 
-    for txt_file in tqdm(txt_files, desc="Parsing articles"):
-        article_id = txt_file.stem
-        
-        try:
-            with open(txt_file, 'r', encoding='utf-8') as f:
-                article_text = f.read()
-        except Exception:
-            continue
+    # --- 2. DATA DOWNLOAD  ---
+    print(f"☁️ Downloading preprocessed data from Hugging Face: {source_dataset_repo}")
 
-        label_file = raw_path / f"{article_id}.task1-SI.labels"
-        spans = []
-        
-        if label_file.exists():
-            try:
-                with open(label_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        parts = line.strip().split('\t')
-                        if len(parts) >= 3:
-                            try:
-                                start_idx = int(parts[1])
-                                end_idx = int(parts[2])
-                                spans.append({
-                                    'start': start_idx, 
-                                    'end': end_idx,
-                                    'fragment': article_text[start_idx:end_idx]
-                                })
-                            except ValueError:
-                                continue
-            except Exception:
-                pass
-
-        all_data.append({
-            'article_id': article_id,
-            'text': article_text,
-            'spans': spans 
-        })
-        
-    return all_data
-
-
-def process_dataset(all_data):
-    print("⚙️ Starting dataset splitting...")
-    
-    article_densities = []
-    for item in all_data:
-        text_len = len(item['text'])
-        if text_len == 0:
-            article_densities.append(0)
-            continue
-        prop_chars = sum([span['end'] - span['start'] for span in item['spans']])
-        article_densities.append(prop_chars / text_len)
-
-    bins = [-1, 0.0001, 0.10, 0.25, 1.0]
-    labels = [0, 1, 2, 3]
-    categories = pd.cut(article_densities, bins=bins, labels=labels)
-
-    train_data, val_data = train_test_split(
-        all_data, 
-        test_size=VAL_SIZE, 
-        random_state=RANDOM_SEED, 
-        stratify=categories
+    dataset = load_dataset(
+        source_dataset_repo, 
+        name="si_sc_dataset",
+        token=HF_TOKEN,
+        download_mode="force_redownload"
     )
     
-    print(f"✅ Split successful. Train: {len(train_data)}, Val: {len(val_data)}")
-    return train_data, val_data
+    train_data = dataset['train']
+    val_data = dataset['validation']
+    print(f"📊 Data Loaded: Train={len(train_data)}, Val={len(val_data)}")
 
+    # --- 3. TOKENIZER & PREPROCESSING ---
+    print("⚙️ Initializing Tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-if __name__ == "__main__":
-    full_data = build_dataset(RAW_PATH)
-    print(f"Total raw examples: {len(full_data)}")
+    def tokenize_fn(examples):
+        combined_texts = []
 
-    train_data, val_data = process_dataset(full_data)
+        for p, t, n in zip(examples["prev_text"], examples["text"], examples["next_text"]):
+
+            p_safe = p if p is not None else ""
+            t_safe = t if t is not None else ""
+            n_safe = n if n is not None else ""
+            
+            combined = f"{p_safe} {tokenizer.sep_token} {t_safe} {tokenizer.sep_token} {n_safe}".strip()
+            combined = " ".join(combined.split()) 
+            
+            combined_texts.append(combined)
+            
+        return tokenizer(combined_texts, truncation=True, max_length=max_length)
+
+    train_dataset = train_data.map(tokenize_fn, batched=True)
+    val_dataset = val_data.map(tokenize_fn, batched=True)
+
+    # --- 4. CLASS WEIGHTS CALCULATION ---
+    print("⚖️ Calculating Class Weights for Trainer...")
+    labels = train_dataset['label']
+    counts = np.bincount(labels)
+    weight_0 = 1.0
+    weight_1 = counts[0] / (counts[1] + 1e-9)
+    class_weights = torch.tensor([weight_0, weight_1], dtype=torch.float)
+    print(f"⚖️ Class Weights: Clean(0)={weight_0:.2f}, Propaganda(1)={weight_1:.2f}")
+
+    # --- 5. MODEL SETUP ---
+    id2label = {0: "Clean", 1: "Propaganda"}
+    label2id = {"Clean": 0, "Propaganda": 1}
+
+    from transformers import AutoConfig
+    config = AutoConfig.from_pretrained(
+        model_name, 
+        num_labels=2,
+        id2label=id2label,
+        label2id=label2id
+    )
     
-    output_file = os.path.join(PROCESSED_PATH, 'si_dataset.json')
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(full_data, f, ensure_ascii=False, indent=2)
-    print(f"\n✅ Local dataset saved to: {output_file}")
+    if hasattr(config, "hidden_dropout_prob"):
+        config.hidden_dropout_prob = custom_dropout
+    if hasattr(config, "attention_probs_dropout_prob"):
+        config.attention_probs_dropout_prob = custom_dropout
+
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_name, 
+        config=config
+    )
+
+    # --- 6. TRAINING ARGUMENTS ---
+    training_args = TrainingArguments(
+        output_dir=f"./results_sc/{run_id}",
+        run_name=run_id,
+        num_train_epochs=num_train_epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size * 2, 
+        optim="adamw_torch",
+        learning_rate=learning_rate,
+        weight_decay=weight_decay,
+        max_grad_norm=1.0,
+        lr_scheduler_type=lr_scheduler_type,
+        warmup_ratio=warmup_ratio,
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        logging_steps=10,
+        report_to="wandb",
+        load_best_model_at_end=True,
+        metric_for_best_model="f2",
+        greater_is_better=True,
+        save_total_limit=1,
+        fp16=False,
+        push_to_hub=False 
+    )
+
+    # --- 7. TRAINER INITIALIZATION ---
+    trainer = WeightedLossTrainer(
+        class_weights=class_weights,
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        processing_class=tokenizer,
+        data_collator=DataCollatorWithPadding(tokenizer=tokenizer),        
+        compute_metrics=lambda eval_pred: compute_metrics(
+            eval_pred, 
+            average='binary', 
+            pos_label=1, 
+            include_fbeta=True
+        ),
+        
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)]
+    )
+
+    # --- 8. TRAINING LOOP ---
+    print("🚀 Starting training...")
+    trainer.train()
+
+    # --- 9. WANDB CUSTOM PLOTS (PR Curve & Confusion Matrix) ---
+    print("📊 Generating custom W&B evaluation plots...")
+    eval_results = trainer.predict(val_dataset)
+    logits = eval_results.predictions
+    y_true = eval_results.label_ids
     
-    if HF_TOKEN:
-        print(f"☁️ Uploading to Hugging Face: {HF_DATASET_REPO} (Config: span_identification)...")
+    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=-1).numpy()
+    
+    wandb.log({"pr_curve": wandb.plot.pr_curve(y_true, probs, labels=["Clean", "Propaganda"])})    
+    log_confusion_matrix(trainer, val_dataset, id2label)
+
+    # --- 10. SAVING BEST MODEL TO HF ---
+    if push_model_to_hub:
+        print(f"🔥 Training finished. Uploading best {run_prefix} model to HF...")
+        best_model_path = f"./best_model_sc/{run_prefix}"
+        trainer.save_model(best_model_path)
+        tokenizer.save_pretrained(best_model_path)
+        
         try:
-            dataset_dict = DatasetDict({
-                'full': Dataset.from_list(full_data),
-                'train': Dataset.from_list(train_data),
-                'validation': Dataset.from_list(val_data)
-            })
-            
-            dataset_dict.push_to_hub(
-                HF_DATASET_REPO, 
-                config_name="span_identification",
-                token=HF_TOKEN
+            api.create_repo(repo_id=hf_model_repo, exist_ok=True)
+            api.upload_folder(
+                folder_path=best_model_path,
+                repo_id=hf_model_repo,
+                commit_message=f"Add best {run_prefix} model from run {run_id}"
             )
-            print("🎉 SUCCESS! SI Dataset is live on Hugging Face.")
-            print(f"🔗 Link: https://huggingface.co/datasets/{HF_DATASET_REPO}")
-            
+            print(f"✅ Successfully uploaded to HF: https://huggingface.co/{hf_model_repo}")
         except Exception as e:
             print(f"❌ Upload failed: {e}")
-    else:
-        print("⚠️ HF_TOKEN not found. Skipping upload.")
+
+    # --- 11. CLEANUP ---
+    wandb.finish()
+    del model, trainer, train_dataset, val_dataset
+    torch.cuda.empty_cache()
+    gc.collect()
+    
+    print("🏁 SC Pipeline Finished.")
+
+if __name__ == "__main__":
+    run_sc_pipeline()
