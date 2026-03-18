@@ -24,6 +24,7 @@ import torch.nn as nn
 
 sys.path.append(os.getcwd())
 from src.utils.common import seed_everything
+from src.utils.preprocessor import get_tokenize_fn
 
 
 # --- 1. CONFIG & SETUP ---
@@ -75,21 +76,7 @@ def run_sc_pipeline(
     print("⚙️ Initializing Tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    def tokenize_fn(examples):
-        combined_texts = []
-
-        for p, t, n in zip(examples["prev_text"], examples["text"], examples["next_text"]):
-
-            p_safe = p if p is not None else ""
-            t_safe = t if t is not None else ""
-            n_safe = n if n is not None else ""
-            
-            combined = f"{p_safe} {tokenizer.sep_token} {t_safe} {tokenizer.sep_token} {n_safe}".strip()
-            combined = " ".join(combined.split()) 
-            
-            combined_texts.append(combined)
-            
-        return tokenizer(combined_texts, truncation=True, max_length=max_length)
+    tokenize_fn = get_tokenize_fn(tokenizer=tokenizer, max_length=max_length)
 
     train_dataset = train_data.map(tokenize_fn, batched=True)
     val_dataset = val_data.map(tokenize_fn, batched=True)

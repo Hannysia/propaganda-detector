@@ -128,3 +128,20 @@ def merge_close_spans(spans, threshold):
             merged.append(current)
             
     return merged
+
+def get_tokenize_fn(tokenizer, max_length):
+
+    def tokenize_fn(examples):
+        combined_texts = []
+        for p, t, n in zip(examples["prev_text"], examples["text"], examples["next_text"]):
+            p_safe = p if p is not None else ""
+            t_safe = t if t is not None else ""
+            n_safe = n if n is not None else ""
+            
+            combined = f"{p_safe} {tokenizer.sep_token} {t_safe} {tokenizer.sep_token} {n_safe}".strip()
+            combined = " ".join(combined.split()) 
+            combined_texts.append(combined)
+            
+        return tokenizer(combined_texts, truncation=True, max_length=max_length)
+    
+    return tokenize_fn
