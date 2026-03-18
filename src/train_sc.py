@@ -178,6 +178,7 @@ def run_sc_pipeline(
     if push_model_to_hub:
         print(f"🔥 Training finished. Uploading best {run_prefix} model to HF...")
         best_model_path = f"./best_model_sc/{run_prefix}"
+        os.makedirs(best_model_path, exist_ok=True)
         trainer.save_model(best_model_path)
         tokenizer.save_pretrained(best_model_path)
         
