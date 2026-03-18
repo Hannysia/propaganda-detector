@@ -5,6 +5,7 @@ from datasets import load_dataset, concatenate_datasets
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments, DataCollatorWithPadding
 from huggingface_hub import login
 from src.utils.preprocessor import get_tokenize_fn
+from datasets import DatasetDict
 
 
 def mine_hard_examples(
@@ -72,7 +73,17 @@ def mine_hard_examples(
     print(f"📊 Original dataset size: {len(dataset)}")
     print(f"📊 Enhanced dataset size: {len(enhanced_dataset)}")
     
-    # 8. Відправляємо на Hugging Face
-    print(f"☁️ Pushing enhanced dataset to Hugging Face Hub: {push_to_hub_name}...")
-    enhanced_dataset.push_to_hub(push_to_hub_name, config_name="sc_hnpm_dataset")
-    print("✅ Done! Dataset is ready for training.")
+    print("📋 Fetching original validation split...")
+    val_dataset = load_dataset(dataset_name, "si_sc_dataset", split="validation", token=hf_token)
+    
+    final_dataset = DatasetDict({
+        "train": enhanced_dataset,
+        "validation": val_dataset
+    })
+    
+    print(f"☁️ Pushing enhanced config to: {dataset_name}...")
+    final_dataset.push_to_hub(
+        dataset_name, 
+        config_name="sc_hnpm_dataset"
+    )
+    print("✅ Done! Configuration 'sc_hnpm_dataset' is now available in your main repo.")
