@@ -33,6 +33,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 def run_sc_pipeline(
     model_name: str = "microsoft/deberta-v3-base",
     hf_model_repo: str = "hannusia123123/deberta-sentence-classifier",
+    dataset_config="si_sc_dataset",
     run_prefix: str = "sc-deberta",
     batch_size: int = 16,
     learning_rate: float = 2e-5,
@@ -63,7 +64,7 @@ def run_sc_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        name="si_sc_dataset",
+        name=dataset_config,
         token=HF_TOKEN,
         download_mode="force_redownload"
     )
