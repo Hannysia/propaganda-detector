@@ -119,36 +119,65 @@ def compute_si_metrics(eval_preds, eval_dataset, merge_threshold=0):
     predictions, labels = eval_preds.predictions, eval_preds.label_ids
     
     all_pred_indices, all_true_indices = [], []
-    all_pred_spans, all_true_spans = [], []
+    all_pred_spans_normalized, all_true_spans_normalized = [], []
     flat_true_tags, flat_pred_tags = [], []
 
     for i in range(len(predictions)):
         pred_tags = predictions[i]
         true_tags = labels[i]
-        offsets = eval_dataset[i]['offset_mapping'] 
+        offsets = eval_dataset[i]['offset_mapping']
+        current_offset = eval_dataset[i]['offset']
         
         for p_tag, t_tag in zip(pred_tags, true_tags):
             if t_tag != -100:
                 flat_pred_tags.append(p_tag)
                 flat_true_tags.append(t_tag)
         
-        raw_pred_spans = extract_spans_from_tags(pred_tags, offsets)
+        valid_indices = [idx for idx, t_tag in enumerate(true_tags) if t_tag != -100]
         
-        if merge_threshold > 0:
-            pred_spans = merge_close_spans(raw_pred_spans, threshold=merge_threshold)
-        else:
-            pred_spans = raw_pred_spans
-        
-        true_spans = extract_spans_from_tags(true_tags, offsets)
+        if not valid_indices:
+            all_pred_indices.append(set())
+            all_true_indices.append(set())
+            all_pred_spans_normalized.append([])
+            all_true_spans_normalized.append([])
+            continue
 
-        all_pred_spans.append(pred_spans)
-        all_true_spans.append(true_spans)
+        start_valid_char = offsets[valid_indices[0]][0]
+        end_valid_char = offsets[valid_indices[-1]][1]
+
+        raw_pred_spans = extract_spans_from_tags(pred_tags, offsets)
+        raw_true_spans = extract_spans_from_tags(true_tags, offsets)
+
+        norm_pred_spans = []
+        for s, e in raw_pred_spans:
+            actual_start = max(s, start_valid_char)
+            actual_end = min(e, end_valid_char)
+            if actual_end > actual_start:
+                norm_pred_spans.append((actual_start - current_offset, actual_end - current_offset))
+
+        if merge_threshold > 0:
+            norm_pred_spans = merge_close_spans(norm_pred_spans, threshold=merge_threshold)
+
+        norm_true_spans = []
+        for s, e in raw_true_spans:
+            norm_true_spans.append((s - current_offset, e - current_offset))
+
+        pred_indices = set()
+        for s, e in norm_pred_spans:
+            pred_indices.update(range(s, e))
+            
+        true_indices = set()
+        for s, e in norm_true_spans:
+            true_indices.update(range(s, e))
+
+        all_pred_indices.append(pred_indices)
+        all_true_indices.append(true_indices)
         
-        all_pred_indices.append(set(char for start, end in pred_spans for char in range(start, end)))
-        all_true_indices.append(set(char for start, end in true_spans for char in range(start, end)))
+        all_pred_spans_normalized.append(norm_pred_spans)
+        all_true_spans_normalized.append(norm_true_spans)
 
     sym_precision, sym_recall, sym_f1 = f1_overlap(all_pred_indices, all_true_indices)
-    exact_precision, exact_recall, exact_f1 = get_exact_match_metrics(all_pred_spans, all_true_spans)
+    exact_precision, exact_recall, exact_f1 = get_exact_match_metrics(all_pred_spans_normalized, all_true_spans_normalized)
     
     log_si_confusion_matrix(flat_true_tags, flat_pred_tags)
 
