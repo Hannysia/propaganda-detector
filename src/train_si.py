@@ -55,7 +55,7 @@ def run_si_pipeline(
     
     dataset = load_dataset(
         source_dataset_repo, 
-        name="span_identification",
+        name="si_sc_dataset",
         token=HF_TOKEN,
         download_mode="force_redownload"
     )
