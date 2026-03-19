@@ -133,7 +133,8 @@ def run_si_pipeline(
         metric_for_best_model="f1_symbolic", 
         greater_is_better=True,
         save_total_limit=1,
-        fp16=False,
+        fp16=True,
+        dataloader_num_workers=2,
         bf16=False,
         push_to_hub=False 
     )
@@ -157,8 +158,6 @@ def run_si_pipeline(
         processing_class=tokenizer,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)]
     )
-
-    trainer.use_amp = False
 
     # --- 8. TRAINING LOOP ---
     print("🚀 Starting training...")
