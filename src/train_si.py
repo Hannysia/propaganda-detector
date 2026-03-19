@@ -32,7 +32,6 @@ def run_si_pipeline(
     lr_scheduler_type: str = "cosine",
     gradient_accumulation_steps: int = 1,
     max_length: int = 512,
-    stride: int = 128,
     merge_threshold: int = 0,
     focal_weight: float = 1.0,
     custom_dropout: float = 0.1,
@@ -73,21 +72,23 @@ def run_si_pipeline(
     train_dataset = PropagandaSIDataset(
         data=train_data,
         tokenizer=tokenizer, 
-        max_length=max_length, 
-        stride=stride
+        max_length=max_length
     )
     
     val_dataset = PropagandaSIDataset(
         data=val_data,
         tokenizer=tokenizer, 
-        max_length=max_length, 
-        stride=stride
+        max_length=max_length
     )
 
     # --- 4. POS_WEIGHT CALCULATION (For Trainer) ---
     print("⚖️ Calculating Pos Weight for Trainer...")
-    all_labels = [label for item in train_dataset for label in item['labels'] if label != -100]
-    counts = np.bincount(all_labels)
+    counts = np.zeros(3)
+    for item in train_dataset:
+        labels = item['labels']
+        counts[0] += (labels == 0).sum().item()
+        counts[1] += (labels == 1).sum().item()
+        counts[2] += (labels == 2).sum().item()
     
     pos_weight = counts[0] / (counts[1] + counts[2] + 1e-9)
     print(f"⚖️ Pos Weight set to: {pos_weight:.2f}")
