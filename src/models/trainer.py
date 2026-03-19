@@ -61,9 +61,6 @@ class SITrainer(Trainer):
             labels=labels
         )
 
-        if labels is not None and (labels > 0).any():
-            loss = loss * self.pos_weight
-
         if return_outputs:
             with torch.no_grad():
                 predictions = model(
