@@ -58,25 +58,37 @@ def log_confusion_matrix(trainer, eval_dataset, id2label):
     plt.close()
 
 
-def f1_overlap(preds, gold):
-    precisions = []
-    recalls = []
+def f1_overlap(all_preds, all_gold):
 
-    for p, g in zip(preds, gold):
-        if len(p) == 0 and len(g) == 0:
-            precisions.append(1.0); recalls.append(1.0)
-            continue
-        if len(p) == 0 or len(g) == 0:
-            precisions.append(0.0); recalls.append(0.0)
-            continue
-            
-        intersect = len(p.intersection(g))
-        precisions.append(intersect / len(p))
-        recalls.append(intersect / len(g))
+    S_total = [s for s in all_preds if len(s) > 0]
+    T_total = [t for t in all_gold if len(t) > 0]
 
-    precision = np.mean(precisions)
-    recall = np.mean(recalls)
-    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+    if not S_total and not T_total:
+        return 1.0, 1.0, 1.0
+    if not S_total or not T_total:
+        return 0.0, 0.0, 0.0
+
+    p_sum = 0
+    for s in S_total:
+        s_overlap_sum = 0
+        for t in T_total:
+            intersect_len = len(s.intersection(t))
+            if intersect_len > 0:
+                s_overlap_sum += (intersect_len / len(t))
+        p_sum += s_overlap_sum
+    precision = p_sum / len(S_total)
+
+    r_sum = 0
+    for t in T_total:
+        t_overlap_sum = 0
+        for s in S_total:
+            intersect_len = len(t.intersection(s))
+            if intersect_len > 0:
+                t_overlap_sum += (intersect_len / len(s))
+        r_sum += t_overlap_sum
+    recall = r_sum / len(T_total)
+
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
     return precision, recall, f1
 
 
@@ -134,7 +146,7 @@ def compute_si_metrics(eval_preds, eval_dataset, merge_threshold=0):
                 flat_true_tags.append(t_tag)
         
         valid_indices = [idx for idx, t_tag in enumerate(true_tags) if t_tag != -100]
-        
+
         if not valid_indices:
             all_pred_indices.append(set())
             all_true_indices.append(set())
@@ -150,42 +162,37 @@ def compute_si_metrics(eval_preds, eval_dataset, merge_threshold=0):
 
         norm_pred_spans = []
         for s, e in raw_pred_spans:
-            actual_start = max(s, start_valid_char)
-            actual_end = min(e, end_valid_char)
-            if actual_end > actual_start:
-                norm_pred_spans.append((actual_start - current_offset, actual_end - current_offset))
+            s_crop, e_crop = max(s, start_valid_char), min(e, end_valid_char)
+            if e_crop > s_crop:
+                norm_pred_spans.append((s_crop - current_offset, e_crop - current_offset))
 
         if merge_threshold > 0:
             norm_pred_spans = merge_close_spans(norm_pred_spans, threshold=merge_threshold)
 
-        norm_true_spans = []
-        for s, e in raw_true_spans:
-            norm_true_spans.append((s - current_offset, e - current_offset))
+        norm_true_spans = [(s - current_offset, e - current_offset) for s, e in raw_true_spans]
 
-        pred_indices = set()
-        for s, e in norm_pred_spans:
-            pred_indices.update(range(s, e))
-            
-        true_indices = set()
-        for s, e in norm_true_spans:
-            true_indices.update(range(s, e))
+        p_set = set()
+        for s, e in norm_pred_spans: p_set.update(range(s, e))
+        
+        g_set = set()
+        for s, e in norm_true_spans: g_set.update(range(s, e))
 
-        all_pred_indices.append(pred_indices)
-        all_true_indices.append(true_indices)
+        all_pred_indices.append(p_set)
+        all_true_indices.append(g_set)
         
         all_pred_spans_normalized.append(norm_pred_spans)
         all_true_spans_normalized.append(norm_true_spans)
 
-    sym_precision, sym_recall, sym_f1 = f1_overlap(all_pred_indices, all_true_indices)
-    exact_precision, exact_recall, exact_f1 = get_exact_match_metrics(all_pred_spans_normalized, all_true_spans_normalized)
+    sym_p, sym_r, sym_f1 = f1_overlap(all_pred_indices, all_true_indices)
+    exact_p, exact_r, exact_f1 = get_exact_match_metrics(all_pred_spans_normalized, all_true_spans_normalized)
     
     log_si_confusion_matrix(flat_true_tags, flat_pred_tags)
 
     return {
-        "precision_symbolic": sym_precision,
-        "recall_symbolic": sym_recall,
+        "precision_symbolic": sym_p,
+        "recall_symbolic": sym_r,
         "f1_symbolic": sym_f1,
-        "precision_exact": exact_precision,
-        "recall_exact": exact_recall,
+        "precision_exact": exact_p,
+        "recall_exact": exact_r,
         "f1_exact": exact_f1
     }
