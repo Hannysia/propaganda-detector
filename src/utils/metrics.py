@@ -60,8 +60,8 @@ def log_confusion_matrix(trainer, eval_dataset, id2label):
 
 def f1_overlap(all_preds, all_gold):
 
-    S_total = [s for s in all_preds if len(s) > 0]
-    T_total = [t for t in all_gold if len(t) > 0]
+    S_total = [span for doc_spans in all_preds for span in doc_spans]
+    T_total = [span for doc_spans in all_gold for span in doc_spans]
 
     if not S_total and not T_total:
         return 1.0, 1.0, 1.0
@@ -69,23 +69,41 @@ def f1_overlap(all_preds, all_gold):
         return 0.0, 0.0, 0.0
 
     p_sum = 0
-    for s in S_total:
-        s_overlap_sum = 0
-        for t in T_total:
-            intersect_len = len(s.intersection(t))
-            if intersect_len > 0:
-                s_overlap_sum += (intersect_len / len(t))
-        p_sum += s_overlap_sum
-    precision = p_sum / len(S_total)
-
     r_sum = 0
-    for t in T_total:
-        t_overlap_sum = 0
-        for s in S_total:
-            intersect_len = len(t.intersection(s))
-            if intersect_len > 0:
-                t_overlap_sum += (intersect_len / len(s))
-        r_sum += t_overlap_sum
+
+    for p_spans, t_spans in zip(all_preds, all_gold):
+        
+        for s in p_spans:
+            s_overlap_sum = 0
+            s_len = s[1] - s[0]
+            if s_len == 0: continue
+            
+            for t in t_spans:
+                intersect_start = max(s[0], t[0])
+                intersect_end = min(s[1], t[1])
+                
+                if intersect_end > intersect_start:
+                    intersect_len = intersect_end - intersect_start
+                    s_overlap_sum += (intersect_len / s_len) 
+            
+            p_sum += s_overlap_sum
+
+        for t in t_spans:
+            t_overlap_sum = 0
+            t_len = t[1] - t[0]
+            if t_len == 0: continue
+            
+            for s in p_spans:
+                intersect_start = max(s[0], t[0])
+                intersect_end = min(s[1], t[1])
+                
+                if intersect_end > intersect_start:
+                    intersect_len = intersect_end - intersect_start
+                    t_overlap_sum += (intersect_len / t_len) 
+            
+            r_sum += t_overlap_sum
+
+    precision = p_sum / len(S_total)
     recall = r_sum / len(T_total)
 
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
@@ -183,7 +201,7 @@ def compute_si_metrics(eval_preds, eval_dataset, merge_threshold=0):
         all_pred_spans_normalized.append(norm_pred_spans)
         all_true_spans_normalized.append(norm_true_spans)
 
-    sym_p, sym_r, sym_f1 = f1_overlap(all_pred_indices, all_true_indices)
+    sym_p, sym_r, sym_f1 = f1_overlap(all_pred_spans_normalized, all_true_spans_normalized)
     exact_p, exact_r, exact_f1 = get_exact_match_metrics(all_pred_spans_normalized, all_true_spans_normalized)
     
     log_si_confusion_matrix(flat_true_tags, flat_pred_tags)
